@@ -1,0 +1,18 @@
+{
+  "corpus_version": "2026.07.14",
+  "generated_at": "2026-07-14T23:28:49+00:00",
+  "documents": [
+    {
+      "path": "docs/genai-001-uso-do-gateway.md",
+      "sha256": "e1e99c2336795281c5a2e7ac248a5c0a90c695dab700659a05ceaaaa649bd27f"
+    },
+    {
+      "path": "docs/ref-arch-rag-basico.md",
+      "sha256": "c6929d6bf0a1221ba9c9ffbab471a2d980dd178eb16adef54b8939f10aac5ef5"
+    },
+    {
+      "path": "docs/sec-012-guardrails-de-saida.md",
+      "sha256": "37e53b1e596bc1e152a7fda8b0ee4775596789cbe9d10073c220bc248e059e36"
+    }
+  ]
+}

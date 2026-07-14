@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+dist/
+
+# Generated
+mvp/packages/schemas/*.json
+mvp/apps/web/src/types/
+
+# Env / local
+.env
+.env.local
+.DS_Store

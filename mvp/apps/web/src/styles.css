@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Design tokens — linguagem blueprint (§12 das specs) */
+@theme {
+  --color-bg: #090f1b;
+  --color-panel: #141a26;
+  --color-card: #1c2840;
+  --color-primary: #1458e8;
+  --color-ink: #edf2fd;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Space Grotesk", var(--font-sans);
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  /* grid blueprint 48x48 */
+  background-image: radial-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
