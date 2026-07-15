@@ -1,0 +1,13 @@
+# Configuração do pnpm (v10+ lê settings daqui)
+
+# Scripts de build de dependências são bloqueados por padrão (proteção
+# supply-chain). esbuild precisa do postinstall para baixar o binário nativo —
+# sem ele o Vite não sobe. Autorizar só o necessário, caso a caso.
+allowBuilds:
+  esbuild: true
+
+# minimumReleaseAge: 0 desativa a quarentena supply-chain de pacotes recém-
+# publicados (default do pnpm 11 = 24h). Em dev local ela bloqueia o install
+# sempre que uma dependência transitiva de atualização frequente (ex.:
+# electron-to-chromium) tem release no dia. Reavaliar se o projeto for para CI/produção.
+minimumReleaseAge: 0

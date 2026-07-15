@@ -12,9 +12,19 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from ..routers.archetypes import ArchetypeOut
+from ..routers.diagrams import CreateDiagram, DiagramOut, DiagramSummary, UpdateDiagram
 from ..routers.me import UserOut
+from .intake import Intake
 
-EXPORTED: list[type[BaseModel]] = [UserOut, ArchetypeOut]
+EXPORTED: list[type[BaseModel]] = [
+    UserOut,
+    ArchetypeOut,
+    Intake,
+    CreateDiagram,
+    UpdateDiagram,
+    DiagramOut,
+    DiagramSummary,
+]
 
 
 def main() -> None:

@@ -1,0 +1,52 @@
+"""Fixtures de teste de API: banco blueprint_test isolado no Postgres do compose.
+
+Os testes de rota precisam da stack local de pé (make up); sem Postgres
+acessível eles são pulados — os testes unitários continuam rodando.
+"""
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from blueprint.db import get_session
+from blueprint.db.models import Base
+from blueprint.main import app
+
+PG = "postgresql+asyncpg://blueprint:blueprint@localhost:5432"
+TEST_DB_URL = f"{PG}/blueprint_test"
+
+
+async def _ensure_test_db() -> None:
+    admin = create_async_engine(f"{PG}/postgres", isolation_level="AUTOCOMMIT")
+    try:
+        async with admin.connect() as conn:
+            exists = await conn.scalar(
+                text("SELECT 1 FROM pg_database WHERE datname = 'blueprint_test'")
+            )
+            if not exists:
+                await conn.execute(text("CREATE DATABASE blueprint_test"))
+    except OSError:
+        pytest.skip("Postgres indisponível — suba a stack (make up) para os testes de API")
+    finally:
+        await admin.dispose()
+
+
+@pytest.fixture
+async def client():
+    await _ensure_test_db()
+    engine = create_async_engine(TEST_DB_URL)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_session():
+        async with maker() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+    app.dependency_overrides.clear()
+    await engine.dispose()

@@ -76,9 +76,13 @@ services:
   web:
     image: node:22-slim
     working_dir: /app
-    # corepack lê a versão do campo packageManager do package.json (pnpm 11 fixado)
-    command: sh -c "corepack enable && pnpm install && pnpm dev"
-    environment: { VITE_API_PROXY: "http://api:8000" }
+    # corepack lê a versão do campo packageManager do package.json (pnpm 11 fixado).
+    # --no-frozen-lockfile: com CI=true o pnpm congelaria o lockfile, mas aqui o
+    # container é quem atualiza o pnpm-lock.yaml quando o package.json muda (dev local)
+    command: sh -c "corepack enable && pnpm install --no-frozen-lockfile && pnpm dev"
+    # CI=true → pnpm não-interativo (sem TTY no container: purge de node_modules,
+    # prompts etc. não podem pedir confirmação)
+    environment: { VITE_API_PROXY: "http://api:8000", CI: "true" }
     ports: ["5173:5173"]
     volumes: ["./apps/web:/app", "webmodules:/app/node_modules"]
     depends_on: [api]

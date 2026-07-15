@@ -34,7 +34,7 @@ make revision m="mensagem"    # nova migration autogenerate
 ### Fases
 
 - [x] **Fase 0 — Fundação**: compose, FastAPI + Alembic, LLMClient mock, auth stub, web shell
-- [ ] **Fase 1 — Intake + diagramas + canvas** (US1)
+- [x] **Fase 1 — Intake + diagramas + canvas** (US1)
 - [ ] **Fase 2 — Metadados, comentários, simulador** (US2/US3)
 - [ ] **Fase 3 — Corpus + busca** (M6)
 - [ ] **Fase 4 — Juiz único** (US5)
