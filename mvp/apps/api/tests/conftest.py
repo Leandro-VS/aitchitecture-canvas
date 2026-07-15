@@ -40,6 +40,7 @@ async def client():
     await _ensure_test_db()
     engine = create_async_engine(TEST_DB_URL)
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     maker = async_sessionmaker(engine, expire_on_commit=False)
