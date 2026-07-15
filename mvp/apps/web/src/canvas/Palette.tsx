@@ -21,10 +21,27 @@ export function Palette() {
   }, [data]);
 
   return (
-    <aside className="w-56 shrink-0 overflow-y-auto border-r border-white/10 bg-panel p-3">
+    <aside className="w-56 shrink-0 select-none overflow-y-auto border-r border-white/10 bg-panel p-3">
       <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-ink/50">
         Componentes
       </h2>
+      <section className="mb-4">
+        <h3 className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-ink/35">
+          Annotations
+        </h3>
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData(ARCHETYPE_DRAG_TYPE, JSON.stringify({ kind: "annotation" }));
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          className="cursor-grab rounded-md border border-dashed border-amber-400/40
+                     bg-amber-200/5 px-2.5 py-1.5 text-xs text-amber-200/80
+                     hover:border-amber-300 active:cursor-grabbing"
+        >
+          Balão de comentário
+        </div>
+      </section>
       {groups.map(([category, items]) => (
         <section key={category} className="mb-4">
           <h3 className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-ink/35">

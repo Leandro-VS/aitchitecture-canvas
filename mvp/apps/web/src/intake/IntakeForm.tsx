@@ -26,7 +26,6 @@ export function IntakeForm({ defaultValues, submitLabel, onSubmit, busy }: Props
     defaultValues: { ...DEFAULT_FORM_VALUES, ...defaultValues },
   });
   const errors = form.formState.errors;
-  const readRatio = form.watch("read_ratio") ?? 0.8;
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -61,46 +60,16 @@ export function IntakeForm({ defaultValues, submitLabel, onSubmit, busy }: Props
         {errors.considerations && <p className={error}>{errors.considerations.message}</p>}
       </div>
 
-      <fieldset className="rounded-lg border border-white/10 p-4">
-        <legend className="px-2 font-mono text-xs uppercase tracking-widest text-ink/50">
-          NFRs quantitativos
-        </legend>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={label} htmlFor="base_rps">RPS estimado</label>
-            <input id="base_rps" type="number" className={field} {...form.register("base_rps")} />
-            {errors.base_rps && <p className={error}>{errors.base_rps.message}</p>}
-          </div>
-          <div>
-            <label className={label} htmlFor="p99_ms">p99 alvo (ms)</label>
-            <input id="p99_ms" type="number" className={field} {...form.register("p99_ms")} />
-            {errors.p99_ms && <p className={error}>{errors.p99_ms.message}</p>}
-          </div>
-          <div>
-            <label className={label} htmlFor="availability_pct">Disponibilidade alvo (%)</label>
-            <input id="availability_pct" type="number" step="0.01" className={field}
-              {...form.register("availability_pct")} />
-            {errors.availability_pct && <p className={error}>{errors.availability_pct.message}</p>}
-          </div>
-          <div>
-            <label className={label} htmlFor="data_classification">Classificação de dados</label>
-            <select id="data_classification" className={field}
-              {...form.register("data_classification")}>
-              <option value="publica">Pública</option>
-              <option value="interna">Interna</option>
-              <option value="confidencial">Confidencial</option>
-              <option value="restrita">Restrita</option>
-            </select>
-          </div>
-          <div className="col-span-2">
-            <label className={label} htmlFor="read_ratio">
-              Read ratio — {Math.round(readRatio * 100)}% leitura
-            </label>
-            <input id="read_ratio" type="range" min="0" max="1" step="0.01"
-              className="w-full accent-[#1458E8]" {...form.register("read_ratio")} />
-          </div>
-        </div>
-      </fieldset>
+      <div>
+        <label className={label} htmlFor="data_classification">Classificação de dados</label>
+        <select id="data_classification" className={field}
+          {...form.register("data_classification")}>
+          <option value="publica">Pública</option>
+          <option value="interna">Interna</option>
+          <option value="confidencial">Confidencial</option>
+          <option value="restrita">Restrita</option>
+        </select>
+      </div>
 
       <div>
         <label className={label} htmlFor="out_of_scope">Fora de escopo (opcional)</label>

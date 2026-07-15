@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from ..routers.archetypes import ArchetypeOut
 from ..routers.diagrams import CreateDiagram, DiagramOut, DiagramSummary, UpdateDiagram
 from ..routers.me import UserOut
+from ..simulation import SimParams, SimResult
 from .intake import Intake
 
 EXPORTED: list[type[BaseModel]] = [
@@ -24,6 +25,8 @@ EXPORTED: list[type[BaseModel]] = [
     UpdateDiagram,
     DiagramOut,
     DiagramSummary,
+    SimParams,
+    SimResult,
 ]
 
 

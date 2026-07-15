@@ -29,7 +29,9 @@ class CanvasState(BaseModel):
 
 class CreateDiagram(BaseModel):
     title: str = Field(min_length=3, max_length=200)
-    intake: Intake  # embutido → 422 automático se raso (US1)
+    # opcional: desenhar não exige contexto; quando enviado, é validado
+    # integralmente (raso → 422). Recursos de IA exigem intake completo.
+    intake: Intake | None = None
 
 
 class UpdateDiagram(BaseModel):
@@ -43,13 +45,14 @@ class DiagramSummary(BaseModel):
     title: str
     status: str
     node_count: int
+    has_intake: bool
     updated_at: dt.datetime
 
 
 class DiagramOut(BaseModel):
     id: uuid.UUID
     title: str
-    intake: Intake
+    intake: Intake | None
     canvas_state: dict
     canvas_hash: str
     status: str
@@ -57,7 +60,20 @@ class DiagramOut(BaseModel):
     updated_at: dt.datetime
 
 
-def compute_canvas_hash(canvas_state: dict, intake: dict) -> str:
+def require_intake(diagram: Diagram) -> Intake:
+    """Gate dos recursos de IA (juiz, arquiteto, bootstrap): intake completo.
+
+    Desenhar/simular funciona sem contexto; toda chamada de IA passa por aqui.
+    """
+    if diagram.intake is None:
+        raise HTTPException(
+            status_code=409,
+            detail="preencha o contexto (intake) do diagrama para usar recursos de IA",
+        )
+    return Intake.model_validate(diagram.intake)
+
+
+def compute_canvas_hash(canvas_state: dict, intake: dict | None) -> str:
     payload = json.dumps(
         {"canvas": canvas_state, "intake": intake},
         sort_keys=True,
@@ -88,7 +104,7 @@ async def create_diagram(
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DiagramOut:
-    intake = body.intake.model_dump()
+    intake = body.intake.model_dump() if body.intake else None
     diagram = Diagram(
         owner_id=user.id,
         title=body.title,
@@ -116,6 +132,7 @@ async def list_diagrams(
             title=d.title,
             status=d.status,
             node_count=len(d.canvas_state.get("nodes", [])),
+            has_intake=d.intake is not None,
             updated_at=d.updated_at,
         )
         for d in rows

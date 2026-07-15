@@ -2,13 +2,7 @@ VALID_INTAKE = {
     "summary": "Encurtador de URLs interno com redirecionamento de baixa latência e métricas.",
     "functional_requirements": ["Encurtar URL", "Redirecionar via short-code"],
     "considerations": "Sistema read-heavy, ~10 leituras por escrita.",
-    "nfr": {
-        "base_rps": 200,
-        "p99_ms": 100,
-        "availability_pct": 99.9,
-        "read_ratio": 0.9,
-        "data_classification": "interna",
-    },
+    "data_classification": "interna",
 }
 
 
@@ -26,6 +20,16 @@ async def test_create_and_get(client):
     got = await client.get(f"/api/diagrams/{body['id']}")
     assert got.status_code == 200
     assert got.json()["title"] == "Encurtador de URL"
+
+
+async def test_create_with_title_only(client):
+    """Desenhar não exige intake — só o título é obrigatório."""
+    res = await client.post("/api/diagrams", json={"title": "Só o título"})
+    assert res.status_code == 201, res.text
+    assert res.json()["intake"] is None
+
+    listed = (await client.get("/api/diagrams")).json()
+    assert listed[0]["has_intake"] is False
 
 
 async def test_shallow_intake_is_rejected(client):

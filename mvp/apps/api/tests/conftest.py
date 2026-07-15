@@ -32,6 +32,9 @@ async def _ensure_test_db() -> None:
         await admin.dispose()
 
 
+_state: dict = {}
+
+
 @pytest.fixture
 async def client():
     await _ensure_test_db()
@@ -40,6 +43,7 @@ async def client():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     maker = async_sessionmaker(engine, expire_on_commit=False)
+    _state["maker"] = maker
 
     async def override_session():
         async with maker() as session:
@@ -50,3 +54,15 @@ async def client():
         yield c
     app.dependency_overrides.clear()
     await engine.dispose()
+
+
+@pytest.fixture
+async def seed_archetypes(client):
+    """Popula archetypes_config no banco de teste (necessário p/ simulação via API)."""
+    from blueprint.catalog import CATALOG
+    from blueprint.db.models import ArchetypeConfig
+
+    async with _state["maker"]() as session:
+        for item in CATALOG:
+            session.add(ArchetypeConfig(**item))
+        await session.commit()

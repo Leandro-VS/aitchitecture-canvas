@@ -13,20 +13,32 @@ import "@xyflow/react/dist/style.css";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { getDiagram, patchDiagram, type Diagram } from "../api/client";
+import { getDiagram, patchDiagram, type Intake } from "../api/client";
+import { AnnotationNode } from "../canvas/AnnotationNode";
 import { ArchNode } from "../canvas/ArchNode";
+import { IntentEdge } from "../canvas/IntentEdge";
+import { IntentPicker } from "../canvas/IntentPicker";
 import { ARCHETYPE_DRAG_TYPE, Palette } from "../canvas/Palette";
+import { PropertiesPanel } from "../canvas/PropertiesPanel";
 import { serializeCanvas, useCanvas, type CanvasNode } from "../canvas/store";
 import { IntakeForm } from "../intake/IntakeForm";
 import { toFormValues, toIntakePayload } from "../intake/schema";
+import { SimulationPanel } from "../simulation/SimulationPanel";
 
-const nodeTypes = { arch: ArchNode };
+const nodeTypes = { arch: ArchNode, annotation: AnnotationNode };
+const edgeTypes = { intent: IntentEdge };
 const AUTOSAVE_DEBOUNCE_MS = 5000;
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 
 function Canvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addFromPalette } = useCanvas();
+  const nodes = useCanvas((s) => s.nodes);
+  const edges = useCanvas((s) => s.edges);
+  const onNodesChange = useCanvas((s) => s.onNodesChange);
+  const onEdgesChange = useCanvas((s) => s.onEdgesChange);
+  const onConnect = useCanvas((s) => s.onConnect);
+  const addFromPalette = useCanvas((s) => s.addFromPalette);
+  const addAnnotation = useCanvas((s) => s.addAnnotation);
   const { screenToFlowPosition } = useReactFlow();
 
   return (
@@ -34,6 +46,7 @@ function Canvas() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
@@ -41,14 +54,19 @@ function Canvas() {
         const raw = e.dataTransfer.getData(ARCHETYPE_DRAG_TYPE);
         if (!raw) return;
         e.preventDefault();
-        const { archetype, label } = JSON.parse(raw) as { archetype: string; label: string };
-        addFromPalette(archetype, label, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        const payload = JSON.parse(raw) as
+          | { kind: "annotation" }
+          | { archetype: string; label: string };
+        if ("kind" in payload) addAnnotation(position);
+        else addFromPalette(payload.archetype, payload.label, position);
       }}
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
       }}
       fitView
+      deleteKeyCode={["Backspace", "Delete"]}
       proOptions={{ hideAttribution: true }}
       className="bg-bg"
     >
@@ -117,7 +135,7 @@ export function Session() {
   }, []);
 
   const saveContext = useMutation({
-    mutationFn: (body: { title: string; intake: Diagram["intake"] }) => patchDiagram(id!, body),
+    mutationFn: (body: { title: string; intake: Intake }) => patchDiagram(id!, body),
     onSuccess: (updated) => {
       queryClient.setQueryData(["diagram", id], updated);
       setEditingContext(false);
@@ -138,16 +156,20 @@ export function Session() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-4 border-b border-white/10 bg-panel px-4 py-2">
+      <header className="flex select-none items-center gap-4 border-b border-white/10 bg-panel px-4 py-2">
         <Link to="/" className="font-mono text-xs text-ink/40 hover:text-primary">
           ← diagramas
         </Link>
         <h1 className="truncate font-display text-sm font-semibold">{d.title}</h1>
         <button
           onClick={() => setEditingContext(true)}
-          className="rounded-md border border-white/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-ink/60 hover:border-primary/60"
+          title={d.intake ? undefined : "obrigatório para usar os recursos de IA"}
+          className={`rounded-md border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest
+            ${d.intake
+              ? "border-white/10 text-ink/60 hover:border-primary/60"
+              : "border-amber-400/50 text-amber-300 hover:border-amber-300"}`}
         >
-          Contexto
+          Contexto{!d.intake && " — pendente p/ IA"}
         </button>
         <span
           className={`ml-auto font-mono text-[10px] uppercase tracking-widest ${
@@ -165,7 +187,24 @@ export function Session() {
             <Canvas />
           </ReactFlowProvider>
         </main>
+        {/* select-none: arrastar sliders não pode sair selecionando texto/canvas */}
+        <aside className="w-72 shrink-0 select-none space-y-5 overflow-y-auto border-l border-white/10 bg-panel p-3">
+          <section>
+            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">
+              Simulação
+            </h2>
+            <SimulationPanel diagramId={d.id} />
+          </section>
+          <section className="border-t border-white/10 pt-4">
+            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">
+              Propriedades
+            </h2>
+            <PropertiesPanel />
+          </section>
+        </aside>
       </div>
+
+      <IntentPicker />
 
       {editingContext && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-8">

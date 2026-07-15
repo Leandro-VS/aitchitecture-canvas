@@ -13,7 +13,9 @@ class Diagram(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
-    intake: Mapped[dict] = mapped_column(JSONB)
+    # opcional na criação (desenhar não exige contexto); obrigatório e validado
+    # para usar recursos de IA (juiz, arquiteto, bootstrap) — gate em require_intake
+    intake: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     canvas_state: Mapped[dict] = mapped_column(JSONB, default=dict)  # nodes, edges, viewport
     # sha256(canvas_state + intake) — intake compõe o hash porque muda o veredito
     # dos juízes tanto quanto o grafo (chave de cache na Fase 4)
