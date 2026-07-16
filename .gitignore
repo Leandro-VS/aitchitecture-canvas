@@ -22,3 +22,6 @@ mvp/apps/web/src/types/
 
 # cache do pnpm (container)
 mvp/apps/web/.pnpm-store/
+
+# files
+AGENTS.md
