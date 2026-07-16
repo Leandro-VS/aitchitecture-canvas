@@ -1,14 +1,24 @@
 # AIrchitecture — MVP
 
-Implementação do MVP do canvas de arquitetura com IA (specs completas em
-`../../ADR/` e `../../Implementação/`).
+App para criação de diagramas de System Design com simulador de carga e assistido por IA, para facilitar a vida de quem precisa desenvolver arquiteturas, simular cenários e preencher documentos de Arquitetura.
 
-**Decisões deste MVP:** 100% local e 100% mock — nenhuma chamada real de LLM.
-Juiz, Arquiteto, bootstrap e tutorial respondem com **fixtures determinísticas**
-nos mesmos schemas de produção (`LLM_PROVIDER=mock`). Providers reais
-(Ollama/Iara) entram depois pela mesma interface `LLMClient`, sem tocar nas
-features. O retrieval do corpus usa FTS do Postgres (pseudo-embeddings não têm
-semântica); a coluna pgvector já existe para o provider real futuro.
+Este projeto surgiu da dor de desenvolver arquiteturas de software na cloud possuindo diversos gaps na minha formação e tento que aprender muitos conceitos enquanto desenvolvo. 
+Para otimizar o meu tempo e entregar soluções melhores, comecei a criar as arquiteturas enquanto estudava usando IA, mas era um pouco moroso explicar cada conexão e nó no prompt ou fazer centenas de prints a cada nova mudança ou pergunta. Além disso os aplicativos comuns para criação de diagramas são muito ruins na minha opnião, poluidos, pesados e cheio de recursos desnecessários. Por isso decidi criar algo simples, que atenda as minhas necessidades de desenvolvimento e que integre IA nativamente.
+
+O app propõe:
+
+- Canvas para System Design
+- Ask AI para tirar duvidas de arquitetura
+- Judge-Architect - para avaliar a arquitetura criada utilizando os Guides pré-definidos
+- Simulador Deterministico de carga - gargalos, latência, disponibilidade
+- Pré-ADR para agilizar o processo e discussões
+
+
+**Decisões deste MVP:** 
+- 100% local e 100% mock — nenhuma chamada real de LLM.
+- Juiz, Arquiteto, bootstrap e tutorial respondem com **fixtures determinísticas**
+- O retrieval do corpus usa FTS do Postgres (pseudo-embeddings não têm
+semântica)
 
 ## Arquitetura do MVP
 

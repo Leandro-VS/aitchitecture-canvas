@@ -1,20 +1,18 @@
 # AIrchitecture
 
-Canvas de arquitetura de software com **IA dedicada na mesma tela**: um
-playground onde engenheiros desenham suas arquiteturas (tradicionais e GenAI) e
-contam, sem sair do canvas, com um **Arquiteto IA** (tira dúvidas, recomenda
-padrões e propõe alterações direto no diagrama), um **Juiz IA** (avalia o
-desenho contra os guidelines da empresa, com citação obrigatória de doc + seção)
-e um **simulador determinístico** de carga (gargalos, latência, disponibilidade).
-Ao final, a sessão vira um **pré-ADR** exportável.
+App para criação de diagramas de System Design com simulador de carga e assistido por IA, para facilitar a vida de quem precisa desenvolver arquiteturas, simular cenários e preencher documentos de Arquitetura.
 
-## Objetivo
+Este projeto surgiu da dor de desenvolver arquiteturas de software na cloud possuindo diversos gaps na minha formação e tento que aprender muitos conceitos enquanto desenvolvo. 
+Para otimizar o meu tempo e entregar soluções melhores, comecei a criar as arquiteturas enquanto estudava usando IA, mas era um pouco moroso explicar cada conexão e nó no prompt ou fazer centenas de prints a cada nova mudança ou pergunta. Além disso os aplicativos comuns para criação de diagramas são muito ruins na minha opnião, poluidos, pesados e cheio de recursos desnecessários. Por isso decidi criar algo simples, que atenda as minhas necessidades de desenvolvimento e que integre IA nativamente.
 
-Validar a hipótese central: engenheiros preferem criar e validar arquiteturas em
-um canvas com IA integrada — fundamentada nos guidelines corporativos via RAG —
-em vez do fluxo atual (ferramenta de desenho estática + revisão humana tardia).
-As specs completas, decisões de produto (D1–D17) e o blueprint end-to-end estão
-em `../ADR/` e `../Implementação/`.
+O app propõe:
+
+- Canvas para System Design
+- Ask AI para tirar duvidas de arquitetura
+- Judge-Architect - para avaliar a arquitetura criada utilizando os Guides pré-definidos
+- Simulador Deterministico de carga - gargalos, latência, disponibilidade
+- Pré-ADR para agilizar o processo e discussões
+
 
 ## Arquitetura final (visão)
 

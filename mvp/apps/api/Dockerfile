@@ -1,5 +1,3 @@
-# Multi-stage com uv: lockfile congelado = build reprodutível; a mesma imagem
-# serve api e worker (muda só o command no compose), espelhando o par ECS futuro.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS deps
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
