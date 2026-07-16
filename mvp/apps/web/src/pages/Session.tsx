@@ -23,6 +23,7 @@ import { PropertiesPanel } from "../canvas/PropertiesPanel";
 import { serializeCanvas, useCanvas, type CanvasNode } from "../canvas/store";
 import { IntakeForm } from "../intake/IntakeForm";
 import { toFormValues, toIntakePayload } from "../intake/schema";
+import { JudgePanel } from "../judges/JudgePanel";
 import { SimulationPanel } from "../simulation/SimulationPanel";
 
 const nodeTypes = { arch: ArchNode, annotation: AnnotationNode };
@@ -194,6 +195,16 @@ export function Session() {
               Simulação
             </h2>
             <SimulationPanel diagramId={d.id} />
+          </section>
+          <section className="border-t border-white/10 pt-4">
+            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">
+              Juiz
+            </h2>
+            <JudgePanel
+              diagramId={d.id}
+              hasIntake={d.intake !== null}
+              onNeedContext={() => setEditingContext(true)}
+            />
           </section>
           <section className="border-t border-white/10 pt-4">
             <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">

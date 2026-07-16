@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     llm_fixtures_dir: str = "fixtures/llm"
     embedding_dim: int = 1024  # bge-m3 e cohere v3 = 1024 (schema pronto p/ provider real)
 
+    judge_timeout_s: int = 120  # run preso em queued/running além disso → failed
+
     auth_mode: Literal["stub", "oidc"] = "stub"
     dev_email: str = "dev@local"
 

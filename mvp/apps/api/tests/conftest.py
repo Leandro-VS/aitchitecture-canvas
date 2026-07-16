@@ -58,6 +58,40 @@ async def client():
 
 
 @pytest.fixture
+async def indexed_corpus(client):
+    """Indexa o corpus-example direto no banco de teste (sem S3)."""
+    import json
+    from pathlib import Path
+
+    from blueprint.corpus.parser import validate_release
+    from blueprint.db.models import CorpusChunk, CorpusDocument, CorpusRelease
+    from blueprint.llm.mock import pseudo_embedding
+
+    corpus_dir = Path(__file__).parents[3] / "corpus-example"
+    manifest = json.loads((corpus_dir / "manifest.json").read_text())
+    files = {f"docs/{p.name}": p.read_bytes() for p in (corpus_dir / "docs").glob("*.md")}
+    version = manifest["corpus_version"]
+    docs = validate_release(version, manifest, files)
+
+    async with _state["maker"]() as session:
+        session.add(CorpusRelease(version=version, status="active"))
+        for doc in docs:
+            session.add(CorpusDocument(
+                corpus_version=version, doc_id=doc.doc_id, title=doc.title,
+                doc_type=doc.doc_type, domain=doc.domain, front_matter=doc.front_matter,
+            ))
+            for chunk in doc.chunks:
+                session.add(CorpusChunk(
+                    corpus_version=version, doc_id=doc.doc_id, title=doc.title,
+                    doc_type=doc.doc_type, domain=doc.domain,
+                    heading_path=chunk.heading_path, content=chunk.content,
+                    embedding=pseudo_embedding(chunk.content, 1024),
+                ))
+        await session.commit()
+    return version
+
+
+@pytest.fixture
 async def seed_archetypes(client):
     """Popula archetypes_config no banco de teste (necessário p/ simulação via API)."""
     from blueprint.catalog import CATALOG

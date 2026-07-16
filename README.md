@@ -1,42 +1,67 @@
 # AIrchitecture
 
-Canvas de arquitetura com IA dedicada na mesma tela — implementação do MVP
-(specs em `../ADR/` e `../Implementação/` do diretório pai).
+Canvas de arquitetura de software com **IA dedicada na mesma tela**: um
+playground onde engenheiros desenham suas arquiteturas (tradicionais e GenAI) e
+contam, sem sair do canvas, com um **Arquiteto IA** (tira dúvidas, recomenda
+padrões e propõe alterações direto no diagrama), um **Juiz IA** (avalia o
+desenho contra os guidelines da empresa, com citação obrigatória de doc + seção)
+e um **simulador determinístico** de carga (gargalos, latência, disponibilidade).
+Ao final, a sessão vira um **pré-ADR** exportável.
 
-## MVP (`mvp/`)
+## Objetivo
 
-100% local e 100% mock: nenhuma chamada real de LLM — Juiz, Arquiteto, bootstrap e
-tutorial respondem com fixtures determinísticas nos schemas de produção
-(`LLM_PROVIDER=mock`). Providers reais (Ollama/Iara) entram depois pela mesma
-interface `LLMClient`.
+Validar a hipótese central: engenheiros preferem criar e validar arquiteturas em
+um canvas com IA integrada — fundamentada nos guidelines corporativos via RAG —
+em vez do fluxo atual (ferramenta de desenho estática + revisão humana tardia).
+As specs completas, decisões de produto (D1–D17) e o blueprint end-to-end estão
+em `../ADR/` e `../Implementação/`.
 
-### Subir
+## Arquitetura final (visão)
 
-```bash
-cd mvp
-make up      # docker compose up --build (postgres+pgvector, redis, minio, api, worker, web)
-make seed    # migrations (alembic) + arquétipos + usuário dev
-open http://localhost:5173
+```mermaid
+flowchart LR
+  subgraph Client["Browser"]
+    UI["SPA React + React Flow<br/>canvas · chat · juízes"]
+  end
+
+  subgraph Edge["Borda"]
+    ALB["ALB + WAF"]
+  end
+
+  subgraph ECS["ECS Fargate"]
+    API["api (FastAPI)<br/>REST + SSE"]
+    WK["worker (arq)<br/>juízes · indexação · exports"]
+  end
+
+  subgraph Dados["Dados"]
+    PG[("RDS PostgreSQL<br/>+ pgvector")]
+    RD[("ElastiCache Redis<br/>cache · filas · pub/sub")]
+    S3[("S3<br/>corpus · exports")]
+  end
+
+  subgraph IA["IA (governança central)"]
+    IARA["Gateway Iara"]
+    LLM[("Modelos Bedrock")]
+  end
+
+  EXT["Processo externo<br/>publica pacote de guidelines"] -->|"release"| S3
+  S3 -->|"evento"| EB["EventBridge"] --> WK
+
+  UI --> ALB --> API
+  API --> PG & RD & S3
+  API -->|"chat/bootstrap (SSE)"| IARA --> LLM
+  RD --> WK
+  WK --> IARA
+  WK --> PG & S3
+  DD["Datadog<br/>APM · custo LLM"] -.-> API & WK
 ```
 
-Serviços: web `:5173` · api `:8000` (`/docs` para OpenAPI) · MinIO console `:9001`
-(user `blueprint` / senha `blueprint123`).
+## Estágio atual
 
-### Comandos do dia a dia
+**MVP** — em construção, rodando 100% local (docker compose) e 100% mock
+(nenhuma chamada real de LLM; fixtures determinísticas nos schemas de produção).
+A troca para providers reais (Ollama local / gateway Iara) e o deploy AWS são
+pós-validação, por configuração — nenhum módulo de feature conhece o ambiente.
 
-```bash
-make logs                     # logs de api + worker
-make test                     # pytest + vitest
-make types                    # schemas Pydantic → tipos TS (contrato único)
-make revision m="mensagem"    # nova migration autogenerate
-```
-
-### Fases
-
-- [x] **Fase 0 — Fundação**: compose, FastAPI + Alembic, LLMClient mock, auth stub, web shell
-- [x] **Fase 1 — Intake + diagramas + canvas** (US1)
-- [x] **Fase 2 — Metadados, comentários, simulador** (US2/US3)
-- [x] **Fase 3 — Corpus + busca** (M6)
-- [ ] **Fase 4 — Juiz único** (US5)
-- [ ] **Fase 5 — Arquiteto + bootstrap** (US4)
-- [ ] **Fase 6 — Export MD + tutorial** (US6/US8)
+➡️ **[README do MVP](mvp/README.md)** — arquitetura local, como executar e o
+andamento das fases.

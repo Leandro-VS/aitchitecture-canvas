@@ -1,10 +1,23 @@
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public detail: string,
+  ) {
+    super(`${status}: ${detail}`);
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
   });
   if (!res.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${path} → ${res.status}`);
+    const detail = await res
+      .json()
+      .then((b) => b.detail ?? JSON.stringify(b))
+      .catch(() => res.statusText);
+    throw new ApiError(res.status, String(detail));
   }
   return res.status === 204 ? (undefined as T) : (res.json() as Promise<T>);
 }
@@ -112,6 +125,53 @@ export interface SimResult {
   tips: AdvisorTip[];
   targets: { p99_ms: number | null; availability_pct: number | null };
 }
+
+// --- juiz (M7) ---
+
+export interface JudgeCitation {
+  doc_id: string;
+  section: string;
+  excerpt: string;
+}
+
+export interface JudgeFinding {
+  id: string;
+  severity: "critical" | "warning" | "info";
+  basis: "guideline" | "general";
+  citation: JudgeCitation | null;
+  component_refs: string[];
+  recommendation: string;
+  feedback: "up" | "down" | null;
+  resolved_at: string | null;
+}
+
+export interface JudgeRun {
+  id: string;
+  status: "queued" | "running" | "done" | "failed";
+  cached: boolean;
+  score: number | null;
+  verdict: "pass" | "borderline" | "fail" | null;
+  strengths: string[];
+  findings: JudgeFinding[];
+  error: string | null;
+  created_at: string;
+}
+
+export const runJudge = (diagramId: string, canvasState: CanvasStatePayload) =>
+  api<JudgeRun>("/api/judges/run", {
+    method: "POST",
+    body: JSON.stringify({ diagram_id: diagramId, canvas_state: canvasState }),
+  });
+
+export const getJudgeRun = (runId: string) => api<JudgeRun>(`/api/judges/runs/${runId}`);
+
+export const getLatestJudgeRun = (diagramId: string) =>
+  api<JudgeRun | null>(`/api/judges/latest?diagram_id=${diagramId}`);
+
+export const patchFinding = (
+  findingId: string,
+  body: { feedback?: "up" | "down"; clear_feedback?: boolean; resolved?: boolean },
+) => api<JudgeFinding>(`/api/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(body) });
 
 export const runSimulation = (
   diagramId: string,

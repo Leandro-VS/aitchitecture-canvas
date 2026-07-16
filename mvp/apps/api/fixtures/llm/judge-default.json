@@ -1,0 +1,46 @@
+{
+  "content": {
+    "score": 74,
+    "verdict": "borderline",
+    "strengths": [
+      "O fluxo principal está explícito, com intents claras nas conexões — dá para auditar o caminho da requisição de ponta a ponta.",
+      "O contexto do intake declara requisitos e restrições, o que permite avaliar o desenho contra objetivos concretos."
+    ],
+    "findings": [
+      {
+        "severity": "critical",
+        "component_refs": ["archetype:llm-gateway"],
+        "basis": "guideline",
+        "citation": {
+          "doc_id": "SEC-012",
+          "section": "Regra",
+          "excerpt": "Todo fluxo em que a resposta de um LLM alcança um usuário externo DEVE passar por um componente de guardrail de saída antes da entrega."
+        },
+        "recommendation": "Não há Guardrails entre a saída do LLM e o usuário. Adicione um componente Guardrails no caminho de resposta (edge guardrail_check) antes da entrega em canal externo."
+      },
+      {
+        "severity": "warning",
+        "component_refs": ["archetype:llm-gateway", "archetype:semantic-cache"],
+        "basis": "guideline",
+        "citation": {
+          "doc_id": "REF-ARCH-RAG-01",
+          "section": "Componentes obrigatórios",
+          "excerpt": "Semantic Cache: na frente do LLM Gateway em fluxos de pergunta-resposta; taxa de hit típica de 30–40% em atendimento reduz custo e p99."
+        },
+        "recommendation": "Fluxos de pergunta-resposta sem Semantic Cache pagam o custo integral de inferência em toda requisição. Coloque um Semantic Cache com cache_lookup na frente do LLM Gateway."
+      },
+      {
+        "severity": "warning",
+        "component_refs": ["archetype:sql-db"],
+        "basis": "general",
+        "recommendation": "O banco relacional aparece como dependência síncrona única no caminho crítico. Avalie réplicas de leitura ou um cache na frente para o perfil read-heavy declarado no intake."
+      },
+      {
+        "severity": "info",
+        "component_refs": [],
+        "basis": "general",
+        "recommendation": "Use os balões de comentário para registrar decisões já tomadas (ex.: tecnologias mandatórias) — as avaliações passam a respeitá-las como restrições do autor."
+      }
+    ]
+  }
+}
