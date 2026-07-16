@@ -10,8 +10,9 @@ const ASYNC = new Set(["async_enqueue", "async_consume"]);
 export function IntentEdge(props: EdgeProps) {
   const [path, labelX, labelY] = getSmoothStepPath(props);
   const intent = (props.data?.intent as string) ?? "request";
+  const isGhost = Boolean(props.data?.ghost);
   const isAnchor = intent === "annotation";
-  const dashed = isAnchor || ASYNC.has(intent);
+  const dashed = isGhost || isAnchor || ASYNC.has(intent);
 
   return (
     <>
@@ -19,7 +20,13 @@ export function IntentEdge(props: EdgeProps) {
         id={props.id}
         path={path}
         style={{
-          stroke: isAnchor ? "rgba(251,191,36,.5)" : props.selected ? "#1458E8" : "rgba(237,242,253,.35)",
+          stroke: isGhost
+            ? "rgba(34,211,238,.7)"
+            : isAnchor
+              ? "rgba(251,191,36,.5)"
+              : props.selected
+                ? "#1458E8"
+                : "rgba(237,242,253,.35)",
           strokeWidth: props.selected ? 2 : 1.5,
           strokeDasharray: dashed ? "6 4" : undefined,
         }}

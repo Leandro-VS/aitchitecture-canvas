@@ -17,11 +17,13 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
   const updateNodeData = useCanvas((s) => s.updateNodeData);
   const replicas = data.replicas ?? 1;
 
-  const border = selected
-    ? "border-primary"
-    : sim
-      ? healthBorder[sim.health]
-      : "border-white/15";
+  const border = data.ghost
+    ? "border-dashed border-cyan-400/80"
+    : selected
+      ? "border-primary"
+      : sim
+        ? healthBorder[sim.health]
+        : "border-white/15";
 
   const setReplicas = (delta: number) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -29,7 +31,16 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
   };
 
   return (
-    <div className={`min-w-36 rounded-lg border bg-card px-3 py-2 shadow-lg ${border}`}>
+    <div
+      className={`relative min-w-36 rounded-lg border bg-card px-3 py-2 shadow-lg ${border}
+        ${data.ghost ? "opacity-75" : ""}`}
+    >
+      {data.ghost && (
+        <span className="absolute -top-2 left-2 rounded bg-cyan-400/20 px-1.5 font-mono
+                         text-[9px] uppercase tracking-widest text-cyan-300">
+          sugestão
+        </span>
+      )}
       <div className="text-sm font-medium text-ink">{data.name}</div>
       {data.subtitle && <div className="text-xs text-ink/60">{data.subtitle}</div>}
       <div className="font-mono text-[10px] uppercase tracking-widest text-ink/40">

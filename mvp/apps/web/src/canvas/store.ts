@@ -11,7 +11,8 @@ import {
 import { temporal } from "zundo";
 import { create } from "zustand";
 
-import type { SimResult } from "../api/client";
+import type { ProposedDiff, SimResult } from "../api/client";
+import { dagreLayout } from "./layout";
 
 export const INTENTS = [
   "request",
@@ -29,6 +30,9 @@ export interface ArchNodeData extends Record<string, unknown> {
   name: string; // nome exibido (default: label)
   subtitle?: string; // D16 — opcional, como tudo aqui (decisão: sem gate de metadados)
   replicas?: number; // controlado pelos botões −/+ no próprio nó
+  /** sugestão do Arquiteto ainda não aceita — excluída do autosave/simulação/juiz */
+  ghost?: boolean;
+  proposalId?: string; // message_id do diff que criou este elemento
 }
 
 export interface AnnotationData extends Record<string, unknown> {
@@ -61,6 +65,17 @@ interface CanvasStore {
   updateNodeData: (id: string, fields: Record<string, unknown>) => void;
   setSim: (sim: SimResult | null) => void;
   selectNodes: (ids: string[]) => void;
+
+  /** diffs propostos pelo Arquiteto, indexados pelo message_id */
+  proposals: Record<string, ProposedDiff>;
+  applyProposal: (
+    messageId: string,
+    diff: ProposedDiff,
+    origin: XYPosition,
+    labelOf: Record<string, string>,
+  ) => void;
+  materializeProposal: (messageId: string) => void;
+  dismissProposal: (messageId: string) => void;
 }
 
 let seq = 0;
@@ -181,6 +196,101 @@ export const useCanvas = create<CanvasStore>()(
         set((s) => ({
           nodes: s.nodes.map((n) => ({ ...n, selected: ids.includes(n.id) })) as CanvasNode[],
         })),
+
+      proposals: {},
+
+      applyProposal: (messageId, diff, origin, labelOf) => {
+        const { dismissProposal } = get();
+        dismissProposal(messageId); // idempotente: re-mostrar não duplica ghosts
+
+        const adds = diff.ops.filter((op) => op.op === "add_node");
+        const connects = diff.ops.filter((op) => op.op === "connect");
+        const positions = dagreLayout(
+          adds.map((op) => ({ id: op.id })),
+          connects
+            .filter((op) => adds.some((a) => a.id === op.source || a.id === op.target))
+            .map((op) => ({ source: op.source, target: op.target })),
+        );
+        const ghostNodes: CanvasNode[] = adds.map((op) => ({
+          id: op.id,
+          type: "arch" as const,
+          position: {
+            x: origin.x + (positions[op.id]?.x ?? 0),
+            y: origin.y + (positions[op.id]?.y ?? 0),
+          },
+          data: {
+            archetype: op.archetype,
+            label: labelOf[op.archetype] ?? op.archetype,
+            name: op.name,
+            subtitle: op.subtitle ?? undefined,
+            ghost: true,
+            proposalId: messageId,
+          },
+        }));
+        const ghostEdges: Edge[] = connects.map((op, i) => ({
+          id: `ghost-${messageId}-${i}`,
+          source: op.source,
+          target: op.target,
+          type: "intent",
+          data: { intent: op.intent, ghost: true, proposalId: messageId },
+        }));
+        set((s) => ({
+          nodes: [...s.nodes, ...ghostNodes],
+          edges: [...s.edges, ...ghostEdges],
+          proposals: { ...s.proposals, [messageId]: diff },
+        }));
+      },
+
+      materializeProposal: (messageId) => {
+        const diff = get().proposals[messageId];
+        set((s) => {
+          let nodes = s.nodes.map((n) =>
+            n.data.proposalId === messageId
+              ? ({ ...n, data: { ...n.data, ghost: false, proposalId: undefined } } as CanvasNode)
+              : n,
+          );
+          // ops sobre nós existentes (update/remove) aplicam na materialização
+          for (const op of diff?.ops ?? []) {
+            if (op.op === "update_metadata") {
+              nodes = nodes.map((n) =>
+                n.id === op.id ? ({ ...n, data: { ...n.data, ...op.fields } } as CanvasNode) : n,
+              );
+            } else if (op.op === "remove_node") {
+              nodes = nodes.filter((n) => n.id !== op.id);
+            }
+          }
+          const removed = new Set(
+            (diff?.ops ?? []).filter((op) => op.op === "remove_node").map((op) => op.id),
+          );
+          const proposals = { ...s.proposals };
+          delete proposals[messageId];
+          return {
+            nodes,
+            edges: s.edges
+              .filter((e) => !removed.has(e.source) && !removed.has(e.target))
+              .map((e) =>
+                (e.data as { proposalId?: string } | undefined)?.proposalId === messageId
+                  ? { ...e, data: { ...e.data, ghost: false, proposalId: undefined } }
+                  : e,
+              ),
+            proposals,
+            rev: s.rev + 1, // aplicar é mudança de conteúdo → autosave + re-sim
+          };
+        });
+      },
+
+      dismissProposal: (messageId) =>
+        set((s) => {
+          const proposals = { ...s.proposals };
+          delete proposals[messageId];
+          return {
+            nodes: s.nodes.filter((n) => n.data.proposalId !== messageId),
+            edges: s.edges.filter(
+              (e) => (e.data as { proposalId?: string } | undefined)?.proposalId !== messageId,
+            ),
+            proposals,
+          };
+        }),
     }),
     { limit: 100, partialize: (s) => ({ nodes: s.nodes, edges: s.edges }) },
   ),
@@ -188,14 +298,13 @@ export const useCanvas = create<CanvasStore>()(
 
 export const serializeCanvas = () => {
   const { nodes, edges } = useCanvas.getState();
+  // ghosts (sugestões não aceitas) nunca entram no autosave/simulação/juiz
   return {
-    nodes: nodes.map(({ id, type, position, data }) => ({ id, type, position, data })),
-    edges: edges.map(({ id, source, target, type, data }) => ({
-      id,
-      source,
-      target,
-      type,
-      data,
-    })),
+    nodes: nodes
+      .filter((n) => !n.data.ghost)
+      .map(({ id, type, position, data }) => ({ id, type, position, data })),
+    edges: edges
+      .filter((e) => !(e.data as { ghost?: boolean } | undefined)?.ghost)
+      .map(({ id, source, target, type, data }) => ({ id, source, target, type, data })),
   };
 };

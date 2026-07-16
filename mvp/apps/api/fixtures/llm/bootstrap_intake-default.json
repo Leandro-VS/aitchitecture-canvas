@@ -1,0 +1,14 @@
+{
+  "content": {
+    "summary": "Assistente de atendimento baseado em RAG: responde perguntas de clientes a partir da base de conhecimento interna, citando as fontes utilizadas, com escalonamento para atendimento humano quando a confiança da resposta é baixa.",
+    "functional_requirements": [
+      "Responder perguntas com base na base de conhecimento interna",
+      "Citar a fonte de cada resposta",
+      "Escalar a conversa para um atendente humano quando não souber responder"
+    ],
+    "considerations": "Canal externo voltado a clientes; respostas devem passar por guardrails antes da entrega; a base de conhecimento é atualizada de forma assíncrona, fora do caminho da requisição.",
+    "data_classification": "confidencial",
+    "out_of_scope": null,
+    "inferred_fields": ["summary", "functional_requirements", "considerations", "data_classification"]
+  }
+}

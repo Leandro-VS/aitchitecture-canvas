@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getDiagram, patchDiagram, type Intake } from "../api/client";
+import { AskAI } from "../architect/AskAI";
 import { AnnotationNode } from "../canvas/AnnotationNode";
 import { ArchNode } from "../canvas/ArchNode";
 import { IntentEdge } from "../canvas/IntentEdge";
@@ -198,6 +199,11 @@ export function Session() {
           <SimulationBar diagramId={d.id} />
           <SimResults />
           <PropertiesCard />
+          <AskAI
+            diagramId={d.id}
+            hasIntake={d.intake !== null}
+            onNeedContext={() => setEditingContext(true)}
+          />
           <JudgesRail
             diagramId={d.id}
             hasIntake={d.intake !== null}

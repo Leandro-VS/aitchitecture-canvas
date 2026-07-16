@@ -89,6 +89,123 @@ export const patchDiagram = (
 export const deleteDiagram = (id: string) =>
   api<void>(`/api/diagrams/${id}`, { method: "DELETE" });
 
+// --- arquiteto / Ask AI (M8) + bootstrap (M13) ---
+
+export interface DiffOpAddNode {
+  op: "add_node";
+  id: string;
+  archetype: string;
+  name: string;
+  subtitle?: string | null;
+}
+export interface DiffOpConnect {
+  op: "connect";
+  source: string;
+  target: string;
+  intent: string;
+}
+export interface DiffOpUpdate {
+  op: "update_metadata";
+  id: string;
+  fields: Record<string, unknown>;
+}
+export interface DiffOpRemove {
+  op: "remove_node";
+  id: string;
+}
+export type DiffOp = DiffOpAddNode | DiffOpConnect | DiffOpUpdate | DiffOpRemove;
+
+export interface ProposedDiff {
+  rationale: string;
+  citations: JudgeCitation[];
+  ops: DiffOp[];
+}
+
+export interface ArchitectMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  proposed_diff: ProposedDiff | null;
+  diff_status: "proposed" | "applied" | "dismissed" | null;
+  created_at: string;
+}
+
+export const getArchitectMessages = (diagramId: string) =>
+  api<ArchitectMessage[]>(`/api/architect/messages?diagram_id=${diagramId}`);
+
+export const applyDiff = (messageId: string) =>
+  api<ArchitectMessage>(`/api/architect/diffs/${messageId}/apply`, { method: "POST" });
+
+export const dismissDiff = (messageId: string) =>
+  api<ArchitectMessage>(`/api/architect/diffs/${messageId}/dismiss`, { method: "POST" });
+
+export const bootstrapPrefill = (text: string) =>
+  api<Intake>("/api/architect/bootstrap/prefill", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+
+export const bootstrapSketch = (diagramId: string) =>
+  api<ProposedDiff>("/api/architect/bootstrap/sketch", {
+    method: "POST",
+    body: JSON.stringify({ diagram_id: diagramId }),
+  });
+
+export interface ChatHandlers {
+  onToken: (token: string) => void;
+  onProposedDiff: (diff: ProposedDiff & { message_id: string }) => void;
+  onDone: (messageId: string) => void;
+}
+
+/** POST + ReadableStream (EventSource nativo só faz GET). */
+export async function streamChat(
+  diagramId: string,
+  message: string,
+  canvasState: CanvasStatePayload,
+  handlers: ChatHandlers,
+): Promise<void> {
+  const res = await fetch("/api/architect/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ diagram_id: diagramId, message, canvas_state: canvasState }),
+  });
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((b) => b.detail ?? JSON.stringify(b))
+      .catch(() => res.statusText);
+    throw new ApiError(res.status, String(detail));
+  }
+
+  const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  const handleBlock = (block: string) => {
+    let event = "message";
+    let data = "";
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).replace(/^ /, "");
+    }
+    if (event === "token") handlers.onToken(data);
+    else if (event === "proposed_diff") handlers.onProposedDiff(JSON.parse(data));
+    else if (event === "done") handlers.onDone(JSON.parse(data).message_id);
+  };
+  // blocos SSE separados por linha em branco — sse-starlette usa \r\n
+  const separator = /\r?\n\r?\n/;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let match;
+    while ((match = separator.exec(buffer)) !== null) {
+      const block = buffer.slice(0, match.index);
+      buffer = buffer.slice(match.index + match[0].length);
+      separator.lastIndex = 0;
+      if (block.trim()) handleBlock(block);
+    }
+  }
+}
+
 // --- simulação (M5) ---
 
 export interface SimParams {

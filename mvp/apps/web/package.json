@@ -11,6 +11,7 @@
     "types": "json2ts -i ../../packages/schemas -o src/types"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.4",
     "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-query": "^5.62.0",
     "@xyflow/react": "^12.3.6",

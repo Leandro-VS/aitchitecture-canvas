@@ -1,0 +1,32 @@
+{
+  "content": {
+    "rationale": "Esboço de pipeline RAG de atendimento seguindo a arquitetura de referência REF-ARCH-RAG-01: todo acesso a modelo passa pelo LLM Gateway (GENAI-001), com Semantic Cache na frente para reduzir custo/latência em perguntas repetitivas, retrieval em Vector DB e Guardrails de saída antes da entrega ao cliente (SEC-012).",
+    "citations": [
+      {
+        "doc_id": "REF-ARCH-RAG-01",
+        "section": "Componentes obrigatórios",
+        "excerpt": "LLM Gateway: único ponto de acesso a modelos. Semantic Cache: na frente do LLM Gateway em fluxos de pergunta-resposta."
+      },
+      {
+        "doc_id": "SEC-012",
+        "section": "Regra",
+        "excerpt": "Todo fluxo em que a resposta de um LLM alcança um usuário externo DEVE passar por um componente de guardrail de saída antes da entrega."
+      }
+    ],
+    "ops": [
+      {"op": "add_node", "id": "sk-client", "archetype": "client", "name": "Cliente"},
+      {"op": "add_node", "id": "sk-gw", "archetype": "api-gateway", "name": "API Gateway"},
+      {"op": "add_node", "id": "sk-app", "archetype": "app-server", "name": "Orquestrador de atendimento"},
+      {"op": "add_node", "id": "sk-semcache", "archetype": "semantic-cache", "name": "Semantic Cache"},
+      {"op": "add_node", "id": "sk-llm", "archetype": "llm-gateway", "name": "LLM Gateway"},
+      {"op": "add_node", "id": "sk-guard", "archetype": "guardrails", "name": "Guardrails (saída)", "subtitle": "canal externo"},
+      {"op": "add_node", "id": "sk-vdb", "archetype": "vector-db", "name": "Base de conhecimento", "subtitle": "índice vetorial"},
+      {"op": "connect", "source": "sk-client", "target": "sk-gw", "intent": "request"},
+      {"op": "connect", "source": "sk-gw", "target": "sk-app", "intent": "request"},
+      {"op": "connect", "source": "sk-app", "target": "sk-semcache", "intent": "cache_lookup"},
+      {"op": "connect", "source": "sk-app", "target": "sk-vdb", "intent": "retrieval"},
+      {"op": "connect", "source": "sk-app", "target": "sk-llm", "intent": "llm_call"},
+      {"op": "connect", "source": "sk-llm", "target": "sk-guard", "intent": "guardrail_check"}
+    ]
+  }
+}

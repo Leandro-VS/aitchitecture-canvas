@@ -93,7 +93,7 @@ Notas de dev:
   - Palette: **clique adiciona o componente ao canvas** (além do drag-and-drop)
   - Rails colapsáveis em abas verticais nas bordas (à direita: **AI Judges**,
     estilo da inspiração; à esquerda: contexto/problema)
-- [ ] **Fase 5 — Arquiteto ("Ask AI") + bootstrap** (US4)
+- [x] **Fase 5 — Arquiteto ("Ask AI") + bootstrap** (US4)
   - Entrada do chat: **botão em balão de conversa no canto superior direito do
     canvas, título "Ask AI"** — abre o chat do Arquiteto com contexto completo
     (intake + canvas serializado + comentários + última simulação + RAG)
