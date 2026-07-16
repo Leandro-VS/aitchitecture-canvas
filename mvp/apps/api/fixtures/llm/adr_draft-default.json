@@ -1,0 +1,7 @@
+{
+  "content": {
+    "context": "Este documento registra a proposta de arquitetura desenhada e validada na sessão de design. O sistema atende aos requisitos descritos acima, com as restrições e premissas declaradas pelo autor no contexto do diagrama e nos comentários ancorados aos componentes.",
+    "decision": "Adotar a arquitetura representada no diagrama desta sessão. O desenho foi validado pelo simulador determinístico (métricas na seção Validação) e avaliado pelo Juiz IA contra os guidelines corporativos — os findings abertos e resolvidos estão listados acima e devem ser considerados na revisão deste ADR.",
+    "consequences": "Os trade-offs apontados nos findings do Juiz devem ser endereçados ou aceitos explicitamente pelo comitê. Próximos passos sugeridos: revisar os findings abertos, validar as premissas de capacidade com dados reais de tráfego e detalhar o plano de implantação dos componentes novos."
+  }
+}

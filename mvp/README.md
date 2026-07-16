@@ -98,7 +98,15 @@ Notas de dev:
     canvas, título "Ask AI"** — abre o chat do Arquiteto com contexto completo
     (intake + canvas serializado + comentários + última simulação + RAG)
   - Ghost diff com Apply/Dismiss; bootstrap "Gerar esboço com IA" na criação
-- [ ] **Fase 6 — Export MD + tutorial** (US6/US8)
+- [x] **Fase 6 — Export MD + tutorial** (US6/US8)
+  - Export: botão "Exportar" na sessão → rascunho IA das seções editáveis
+    (fixture `adr_draft`) → Jinja2 → `pre-adr.md` + `pre-adr.png` no MinIO
+    (URLs assinadas); MD inclui requisitos, componentes, comentários,
+    simulação e avaliação do Juiz com citações
+  - Tutorial: Home → 🎓 Tutorial cria a sessão do encurtador de URL com dock
+    de passos declarativos (`tutorial/steps.ts`); ações bloqueiam o Próximo
+    observando os stores; pergunta sugerida enviada ao Ask AI com 1 clique
+    (fixture específica por hash do prompt); progresso em localStorage
 
 Decisões de produto que divergem das specs originais: intake opcional na criação
 (obrigatório só para recursos de IA — gate 409); NFRs quantitativos vivem no

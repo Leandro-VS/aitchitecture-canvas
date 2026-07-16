@@ -75,15 +75,17 @@ async def chat(
     )
     chunks = await search_guidelines(session, body.message, k=6)
     guideline_text = "\n\n".join(f"[{h.citation}]\n{h.excerpt}" for h in chunks)
+    # a pergunta é a ÚLTIMA mensagem, isolada: o MockLLMClient resolve fixtures
+    # pelo hash dela (respostas roteirizadas por prompt — tutorial D14)
     raw = await make_llm_client().chat(
         [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": f"GUIDELINES:\n{guideline_text}\n\n"
-                f"DIAGRAMA:\n{json.dumps(serialized, ensure_ascii=False)}\n\n"
-                f"PERGUNTA: {body.message}",
+                f"DIAGRAMA:\n{json.dumps(serialized, ensure_ascii=False)}",
             },
+            {"role": "user", "content": body.message},
         ],
         feature="architect",
     )

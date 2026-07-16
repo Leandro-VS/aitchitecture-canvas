@@ -206,6 +206,42 @@ export async function streamChat(
   }
 }
 
+// --- export pré-ADR (M9) ---
+
+export interface AdrSections {
+  context: string;
+  decision: string;
+  consequences: string;
+}
+
+export interface ExportOut {
+  id: string;
+  format: string;
+  md_url: string;
+  png_url: string | null;
+  created_at: string;
+}
+
+export const exportDraft = (diagramId: string) =>
+  api<AdrSections>("/api/exports/draft", {
+    method: "POST",
+    body: JSON.stringify({ diagram_id: diagramId }),
+  });
+
+export const createExport = (
+  diagramId: string,
+  sections: AdrSections,
+  pngDataUrl: string | null,
+) =>
+  api<ExportOut>("/api/exports", {
+    method: "POST",
+    body: JSON.stringify({
+      diagram_id: diagramId,
+      sections,
+      png_data_url: pngDataUrl,
+    }),
+  });
+
 // --- simulação (M5) ---
 
 export interface SimParams {

@@ -3,6 +3,13 @@
 Os testes de rota precisam da stack local de pé (make up); sem Postgres
 acessível eles são pulados — os testes unitários continuam rodando.
 """
+# ruff: noqa: E402 — env do MinIO local antes de importar blueprint.settings
+
+import os
+
+os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9000")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "blueprint")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "blueprint123")
 
 import pytest
 from httpx import ASGITransport, AsyncClient

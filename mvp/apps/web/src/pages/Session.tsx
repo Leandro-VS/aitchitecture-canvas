@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { getDiagram, patchDiagram, type Intake } from "../api/client";
 import { AskAI } from "../architect/AskAI";
@@ -22,11 +22,14 @@ import { IntentPicker } from "../canvas/IntentPicker";
 import { ARCHETYPE_DRAG_TYPE, Palette } from "../canvas/Palette";
 import { PropertiesCard } from "../canvas/PropertiesCard";
 import { serializeCanvas, useCanvas, type CanvasNode } from "../canvas/store";
+import { ExportDialog } from "../exports/ExportDialog";
 import { IntakeForm } from "../intake/IntakeForm";
 import { toFormValues, toIntakePayload } from "../intake/schema";
 import { JudgesRail } from "../judges/JudgesRail";
 import { SimResults } from "../simulation/SimResults";
 import { SimulationBar } from "../simulation/SimulationBar";
+import { useTutorialSignals } from "../tutorial/signals";
+import { TutorialOverlay } from "../tutorial/TutorialOverlay";
 
 const nodeTypes = { arch: ArchNode, annotation: AnnotationNode };
 const edgeTypes = { intent: IntentEdge };
@@ -104,6 +107,14 @@ export function Session() {
   const queryClient = useQueryClient();
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [editingContext, setEditingContext] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tutorialActive = searchParams.get("tutorial") === "1";
+
+  // sinais do tutorial não vazam entre diagramas/sessões
+  useEffect(() => {
+    useTutorialSignals.getState().reset();
+  }, [id]);
 
   const diagram = useQuery({
     queryKey: ["diagram", id],
@@ -183,6 +194,13 @@ export function Session() {
           ← diagramas
         </Link>
         <h1 className="truncate font-display text-sm font-semibold">{d.title}</h1>
+        <button
+          onClick={() => setExporting(true)}
+          className="rounded-md border border-white/10 px-2.5 py-1 font-mono text-[10px]
+                     uppercase tracking-widest text-ink/60 hover:border-primary/60 hover:text-ink"
+        >
+          Exportar
+        </button>
         <span
           className={`ml-auto font-mono text-[10px] uppercase tracking-widest ${
             saveState === "error" ? "text-red-400" : "text-ink/40"
@@ -210,10 +228,25 @@ export function Session() {
             onNeedContext={() => setEditingContext(true)}
           />
           <ContextTab hasIntake={d.intake !== null} onClick={() => setEditingContext(true)} />
+          {tutorialActive && (
+            <TutorialOverlay
+              diagramId={d.id}
+              hasIntake={d.intake !== null}
+              onFinish={() => setSearchParams({}, { replace: true })}
+            />
+          )}
         </ReactFlowProvider>
       </div>
 
       <IntentPicker />
+
+      {exporting && (
+        <ExportDialog
+          diagramId={d.id}
+          hasIntake={d.intake !== null}
+          onClose={() => setExporting(false)}
+        />
+      )}
 
       {editingContext && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-8">

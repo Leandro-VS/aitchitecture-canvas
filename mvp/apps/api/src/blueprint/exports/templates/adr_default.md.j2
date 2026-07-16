@@ -1,0 +1,90 @@
+# {{ title }}
+
+| | |
+|---|---|
+| **Status** | Proposed |
+| **Autor** | {{ author }} |
+| **Data** | {{ generated_at }} |
+| **Ferramenta** | AIrchitecture (pré-ADR gerado da sessão de design) |
+
+## Contexto
+
+{{ sections.context or "_a preencher_" }}
+
+{% if intake %}
+## Requisitos
+
+{% for req in intake.functional_requirements %}- {{ req }}
+{% endfor %}
+**Considerações e restrições:** {{ intake.considerations }}
+
+**Classificação de dados predominante:** {{ intake.data_classification }}
+{% if intake.out_of_scope %}
+**Fora de escopo:** {{ intake.out_of_scope }}
+{% endif %}
+{% endif %}
+
+## Diagrama
+
+![Diagrama da arquitetura](pre-adr.png)
+
+## Componentes
+
+| Componente | Subtítulo | Arquétipo | Réplicas |
+|---|---|---|---|
+{% for c in components -%}
+| {{ c.name }} | {{ c.subtitle or "—" }} | {{ c.archetype }} | ×{{ c.replicas }} |
+{% endfor %}
+
+{% if connections %}
+### Conexões
+
+{% for conn in connections %}- {{ conn.from }} —`{{ conn.intent }}`→ {{ conn.to }}
+{% endfor %}
+{% endif %}
+
+{% if annotations %}
+## Notas e decisões do autor
+
+{% for note in annotations %}- {{ note.text }}{% if note.anchored_to %} _(sobre {{ note.anchored_to }})_{% endif %}
+{% endfor %}
+{% endif %}
+
+## Validação
+
+{% if simulation %}
+### Simulação (última execução)
+
+| Métrica | Valor |
+|---|---|
+| RPS total | {{ simulation.total_rps }} |
+| p99 | {{ simulation.p99_ms }} ms |
+| Taxa de erro | {{ (simulation.error_rate * 100) | round(2) }}% |
+| Disponibilidade | {{ simulation.availability_pct }}% |
+| Gargalo | {{ simulation.bottleneck or "nenhum" }} |
+{% else %}
+_Nenhuma simulação executada._
+{% endif %}
+
+{% if judge %}
+### Avaliação do Juiz IA
+
+**Score {{ judge.score }}/100 — {{ judge.verdict }}**
+
+{% for s in judge.strengths %}- ✅ {{ s }}
+{% endfor %}
+{% for f in judge.findings %}
+- **[{{ f.severity }}]{% if f.resolved %} (resolvido){% endif %}** {{ f.recommendation }}
+  {%- if f.citation %} _(guideline: {{ f.citation.doc_id }} > {{ f.citation.section }})_{% else %} _(análise geral)_{% endif %}
+{% endfor %}
+{% else %}
+_Diagrama ainda não avaliado pelo Juiz IA._
+{% endif %}
+
+## Decisão
+
+{{ sections.decision or "_a preencher_" }}
+
+## Consequências e próximos passos
+
+{{ sections.consequences or "_a preencher_" }}

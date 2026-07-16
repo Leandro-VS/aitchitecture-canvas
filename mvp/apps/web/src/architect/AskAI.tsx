@@ -14,6 +14,7 @@ import {
   type ProposedDiff,
 } from "../api/client";
 import { serializeCanvas, useCanvas } from "../canvas/store";
+import { useTutorialSignals } from "../tutorial/signals";
 
 interface Props {
   diagramId: string;
@@ -38,6 +39,7 @@ function DiffCard({ message, labelOf, ghostOrigin }: {
     mutationFn: () => applyDiff(message.id),
     onSuccess: () => {
       materializeProposal(message.id);
+      useTutorialSignals.getState().emit("diffApplied");
       refresh();
     },
   });
@@ -158,8 +160,17 @@ export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages.data, streaming]);
 
-  const send = async () => {
-    const text = input.trim();
+  // tutorial: pergunta sugerida → abre o painel e envia automaticamente
+  const suggestedPrompt = useTutorialSignals((s) => s.suggestedPrompt);
+  useEffect(() => {
+    if (!suggestedPrompt) return;
+    const prompt = useTutorialSignals.getState().consumePrompt();
+    if (!prompt) return;
+    setOpen(true);
+    void send(prompt);
+  }, [suggestedPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const send = async (text: string) => {
     if (!text || streaming !== null) return;
     setInput("");
     setError(null);
@@ -187,6 +198,7 @@ export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
           ),
         onDone: () => {
           setStreaming(null);
+          useTutorialSignals.getState().emit("architectReplied");
           queryClient.invalidateQueries({ queryKey: ["architect-messages", diagramId] });
         },
       });
@@ -266,7 +278,7 @@ export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
         className="flex gap-2 border-t border-white/10 p-2.5"
         onSubmit={(e) => {
           e.preventDefault();
-          void send();
+          void send(input.trim());
         }}
       >
         <input

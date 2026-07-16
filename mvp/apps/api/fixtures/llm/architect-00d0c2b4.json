@@ -1,0 +1,22 @@
+{
+  "content": "Ótima pergunta — o simulador mostra o banco saturando exatamente porque cada redirecionamento consulta o SQL, e o seu perfil é fortemente read-heavy. O padrão clássico aqui é um cache de leitura na frente do banco: o App Server consulta o cache primeiro (cache_lookup) e só vai ao banco no miss. Com hit rate típico de 80–90% para short-codes quentes, a carga no banco despenca. Preparei a sugestão no canvas — aplique e rode a simulação de novo para ver o ganho no p99 e na CPU do banco.",
+  "proposed_diff": {
+    "rationale": "Perfil read-heavy com consulta repetitiva por chave (short-code → URL) é o caso ideal de cache de leitura: absorve a maioria das leituras e tira o banco do caminho crítico.",
+    "citations": [],
+    "ops": [
+      {
+        "op": "add_node",
+        "id": "new-cache",
+        "archetype": "cache",
+        "name": "Cache de redirecionamentos",
+        "subtitle": "short-code → URL"
+      },
+      {
+        "op": "connect",
+        "source": "archetype:app-server",
+        "target": "new-cache",
+        "intent": "cache_lookup"
+      }
+    ]
+  }
+}

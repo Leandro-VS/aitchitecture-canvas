@@ -1,6 +1,16 @@
 from fastapi import FastAPI
 
-from .routers import archetypes, architect, corpus, diagrams, health, judges, me, simulation
+from .routers import (
+    archetypes,
+    architect,
+    corpus,
+    diagrams,
+    exports,
+    health,
+    judges,
+    me,
+    simulation,
+)
 
 
 def create_app() -> FastAPI:
@@ -13,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(corpus.router)
     app.include_router(judges.router)
     app.include_router(architect.router)
+    app.include_router(exports.router)
     return app
 
 

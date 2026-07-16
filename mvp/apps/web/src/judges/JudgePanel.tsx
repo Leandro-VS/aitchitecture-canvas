@@ -9,6 +9,7 @@ import {
   type JudgeRun,
 } from "../api/client";
 import { serializeCanvas } from "../canvas/store";
+import { useTutorialSignals } from "../tutorial/signals";
 import { FindingCard } from "./FindingCard";
 
 const verdictTone: Record<string, string> = {
@@ -61,6 +62,10 @@ export function JudgePanel({ diagramId, hasIntake, onNeedContext }: Props) {
 
   const r = run.data;
   const analyzing = start.isPending || (r && ["queued", "running"].includes(r.status));
+
+  useEffect(() => {
+    if (r?.status === "done") useTutorialSignals.getState().emit("judgeCompleted");
+  }, [r?.status]);
 
   return (
     <div className="space-y-3">
