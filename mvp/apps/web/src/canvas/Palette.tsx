@@ -48,7 +48,7 @@ export function Palette() {
         onClick={() => setMinimized(false)}
         className="absolute left-3 top-3 z-10 select-none rounded-xl border border-white/10
                    bg-panel/95 px-3 py-2 font-mono text-[10px] uppercase tracking-widest
-                   text-ink/60 shadow-xl backdrop-blur hover:text-ink"
+                   text-ink/60 shadow-xl hover:text-ink"
       >
         ▸ Componentes
       </button>
@@ -58,7 +58,7 @@ export function Palette() {
   return (
     <aside className="absolute left-3 top-3 z-10 flex max-h-[calc(100%-1.5rem)] w-56
                       select-none flex-col rounded-xl border border-white/10 bg-panel/95
-                      shadow-xl backdrop-blur">
+                      shadow-xl">
       <header className="flex items-center justify-between px-3 pb-1 pt-2.5">
         <h2 className="font-mono text-xs uppercase tracking-widest text-ink/50">Componentes</h2>
         <button onClick={() => setMinimized(true)} className="text-ink/40 hover:text-ink"

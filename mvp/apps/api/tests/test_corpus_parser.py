@@ -25,7 +25,9 @@ def load_example() -> tuple[str, dict, dict[str, bytes]]:
 def test_example_package_is_valid():
     version, manifest, files = load_example()
     docs = validate_release(version, manifest, files)
-    assert {d.doc_id for d in docs} == {"SEC-012", "GENAI-001", "REF-ARCH-RAG-01"}
+    assert {d.doc_id for d in docs} == {
+        "SEC-012", "GENAI-001", "REF-ARCH-RAG-01", "REL-005", "REL-007"
+    }
     sec = next(d for d in docs if d.doc_id == "SEC-012")
     assert [c.heading_path for c in sec.chunks] == ["Regra", "Racional", "Exceções"]
     assert "guardrail de saída" in sec.chunks[0].content

@@ -1,23 +1,56 @@
 @import "tailwindcss";
 
-/* Design tokens — linguagem blueprint (§12 das specs) */
+/* Design tokens — identidade "bancada de trabalho" (cutting mat)
+   mesa verde + painéis escuros esverdeados (ferramentas sobre a mesa) +
+   primary laranja-estilete (complementar do verde) + acentos cyan p/ IA */
 @theme {
-  --color-bg: #090f1b;
-  --color-panel: #141a26;
-  --color-card: #1c2840;
-  --color-primary: #1458e8;
-  --color-ink: #edf2fd;
+  --color-bg: #0d5c4d; /* base da mesa de corte */
+  --color-panel: #0f1f1b;
+  --color-card: #18342c;
+  --color-primary: #e8622c; /* laranja "estilete" */
+  --color-ink: #eef6f1;
 
   --font-sans: "Inter", system-ui, sans-serif;
   --font-display: "Space Grotesk", var(--font-sans);
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
+/* Mesa de corte: grade fina (16px) + grade maior (80px), como na referência */
 body {
   background-color: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  /* grid blueprint 48x48 */
-  background-image: radial-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size:
+    16px 16px,
+    16px 16px,
+    80px 80px,
+    80px 80px;
+}
+
+/* Canvas do React Flow: mesma mesa, mas a grade é desenhada pelos <Background>
+   do próprio RF para acompanhar pan/zoom */
+.canvas-mat {
+  background-color: var(--color-bg);
+}
+
+/* Painéis roláveis (AI Judge, chat): barra sempre visível — no macOS a barra
+   overlay some e parece que o conteúdo não rola */
+.panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(237, 242, 253, 0.25) transparent;
+}
+.panel-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.panel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(237, 242, 253, 0.22);
+  border-radius: 4px;
+}
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }

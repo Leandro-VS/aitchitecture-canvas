@@ -5,10 +5,10 @@ import { INTENTS, useCanvas, type Intent } from "./store";
 const DESCRIPTIONS: Record<Intent, string> = {
   request: "chamada síncrona padrão",
   cache_lookup: "consulta a cache (hit não segue adiante)",
-  async_enqueue: "publica em fila — sai do caminho síncrono",
-  llm_call: "chamada a modelo de linguagem",
-  retrieval: "busca em índice/vetores (RAG)",
-  guardrail_check: "inspeção de guardrail",
+  async_message: "publica em fila/evento — sai do caminho síncrono",
+  retrieval: "busca em índice (search ou vetores/RAG)",
+  ai_call: "chamada a modelo ou serviço de IA",
+  validation: "checagem: auth, regra de negócio, guardrail",
 };
 
 /** Aberto ao conectar dois nós: toda edge tem um intent (M2/§5.5). */

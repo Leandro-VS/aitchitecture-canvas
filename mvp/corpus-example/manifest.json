@@ -1,6 +1,6 @@
 {
-  "corpus_version": "2026.07.14",
-  "generated_at": "2026-07-14T23:28:49+00:00",
+  "corpus_version": "2026.07.16",
+  "generated_at": "2026-07-16T21:36:27+00:00",
   "documents": [
     {
       "path": "docs/genai-001-uso-do-gateway.md",
@@ -9,6 +9,14 @@
     {
       "path": "docs/ref-arch-rag-basico.md",
       "sha256": "c6929d6bf0a1221ba9c9ffbab471a2d980dd178eb16adef54b8939f10aac5ef5"
+    },
+    {
+      "path": "docs/rel-005-cache-read-heavy.md",
+      "sha256": "c7f1e365dd54b707503887bd24c72164a3d718ec1e31d1f6f18fe8c41593b7df"
+    },
+    {
+      "path": "docs/rel-007-desacoplamento-por-filas.md",
+      "sha256": "97c2190828cde37c813934f03cc788738878071e866d449bfc4344fead170014"
     },
     {
       "path": "docs/sec-012-guardrails-de-saida.md",

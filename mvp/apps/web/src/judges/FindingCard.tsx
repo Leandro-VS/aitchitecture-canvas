@@ -51,7 +51,7 @@ export function FindingCard({ finding, runId }: { finding: JudgeFinding; runId: 
         </span>
         {finding.citation ? (
           <span
-            className="truncate rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[9px] text-sky-300"
+            className="truncate rounded bg-cyan-400/10 px-1.5 py-0.5 font-mono text-[9px] text-cyan-200"
             title={finding.citation.excerpt}
           >
             {finding.citation.doc_id} &gt; {finding.citation.section}

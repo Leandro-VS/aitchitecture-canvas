@@ -15,8 +15,12 @@ from pydantic import BaseModel, Field
 from ..catalog import ARCHETYPE_IDS
 from ..judges.schemas import Citation
 
+# Intents genéricos: servem system design tradicional E sistemas com IA.
+# request=síncrona · cache_lookup=consulta cache · async_message=fila/evento ·
+# retrieval=busca em índice (search ou RAG) · ai_call=chamada a modelo/serviço
+# de IA · validation=checagem (auth, regra de negócio, guardrail)
 Intent = Literal[
-    "request", "cache_lookup", "async_enqueue", "llm_call", "retrieval", "guardrail_check"
+    "request", "cache_lookup", "async_message", "retrieval", "ai_call", "validation"
 ]
 
 MAX_SKETCH_NODES = 25

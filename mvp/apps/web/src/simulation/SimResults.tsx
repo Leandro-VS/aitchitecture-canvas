@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useCanvas } from "../canvas/store";
+import { useTutorialSignals } from "../tutorial/signals";
 
 const tipTone = {
   ok: "border-emerald-400/30 text-emerald-200/90",
@@ -26,6 +27,9 @@ export function SimResults() {
   const nodes = useCanvas((s) => s.nodes);
   const selectNodes = useCanvas((s) => s.selectNodes);
   const [collapsed, setCollapsed] = useState(false);
+  // com o dock do tutorial aberto, o HUD sobe para não ficar escondido
+  const tutorialActive = useTutorialSignals((s) => s.active);
+  const bottom = tutorialActive ? "bottom-32" : "bottom-3";
 
   if (!sim) return null;
   const targets = sim.targets;
@@ -36,9 +40,9 @@ export function SimResults() {
     return (
       <button
         onClick={() => setCollapsed(false)}
-        className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border
+        className={`absolute ${bottom} left-1/2 z-20 -translate-x-1/2 rounded-full border
                    border-white/10 bg-panel/95 px-4 py-1.5 font-mono text-[10px] text-ink/70
-                   shadow-xl backdrop-blur hover:text-ink"
+                   shadow-xl hover:text-ink`}
       >
         p99 {Math.round(sim.p99_ms)} ms · erro {(sim.error_rate * 100).toFixed(1)}% ▴
       </button>
@@ -46,9 +50,9 @@ export function SimResults() {
   }
 
   return (
-    <div className="absolute bottom-3 left-1/2 z-20 w-[600px] max-w-[calc(100%-8rem)]
+    <div className={`absolute ${bottom} left-1/2 z-20 w-[600px] max-w-[calc(100%-8rem)]
                     -translate-x-1/2 select-none rounded-xl border border-white/10
-                    bg-panel/95 p-3 shadow-xl backdrop-blur">
+                    bg-panel p-3 shadow-xl`}>
       <div className="flex items-center divide-x divide-white/10">
         <Metric label="RPS total" value={String(Math.round(sim.total_rps))} />
         <Metric

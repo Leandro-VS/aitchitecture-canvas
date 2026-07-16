@@ -21,7 +21,7 @@
         "op": "connect",
         "source": "archetype:llm-gateway",
         "target": "new-guardrails",
-        "intent": "guardrail_check"
+        "intent": "validation"
       }
     ]
   }

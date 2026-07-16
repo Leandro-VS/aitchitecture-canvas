@@ -1,0 +1,47 @@
+{
+  "content": "Esse é o clássico problema de fan-out do feed: se postar um tweet atualizar sincronamente a timeline de cada seguidor, a latência do post cresce com o número de seguidores e o sistema cai nos picos. O padrão é fan-out on write assíncrono (REL-007 > Regra): o post publica em uma fila e retorna imediatamente; workers consomem e materializam o tweet nas timelines dos seguidores nos shards do NoSQL. O custo é consistência eventual — a timeline converge em segundos, aceitável para feed. Preparei a sugestão no canvas: fila de fan-out + worker (Apply para aceitar). Depois rode a simulação de novo e note que o caminho síncrono do usuário termina na fila.",
+  "proposed_diff": {
+    "rationale": "Fan-out on write via fila: o post enfileira e retorna; workers materializam as timelines de forma assíncrona, desacoplando a latência do usuário do número de seguidores (consistência eventual).",
+    "citations": [
+      {
+        "doc_id": "REL-007",
+        "section": "Regra",
+        "excerpt": "Operações de escrita que se propagam para múltiplos destinos NÃO DEVEM ser executadas de forma síncrona na requisição do usuário."
+      }
+    ],
+    "ops": [
+      {
+        "op": "add_node",
+        "id": "new-fanout-queue",
+        "archetype": "message-queue",
+        "name": "Fila de fan-out",
+        "subtitle": "posts → timelines"
+      },
+      {
+        "op": "add_node",
+        "id": "new-fanout-worker",
+        "archetype": "worker",
+        "name": "Fan-out worker",
+        "subtitle": "materializa timelines"
+      },
+      {
+        "op": "connect",
+        "source": "archetype:app-server",
+        "target": "new-fanout-queue",
+        "intent": "async_message"
+      },
+      {
+        "op": "connect",
+        "source": "new-fanout-queue",
+        "target": "new-fanout-worker",
+        "intent": "async_message"
+      },
+      {
+        "op": "connect",
+        "source": "new-fanout-worker",
+        "target": "archetype:nosql-db",
+        "intent": "request"
+      }
+    ]
+  }
+}

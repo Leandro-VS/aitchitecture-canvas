@@ -14,13 +14,14 @@ import { create } from "zustand";
 import type { ProposedDiff, SimResult } from "../api/client";
 import { dagreLayout } from "./layout";
 
+// Intents genéricos — servem system design tradicional e sistemas com IA
 export const INTENTS = [
   "request",
   "cache_lookup",
-  "async_enqueue",
-  "llm_call",
+  "async_message",
   "retrieval",
-  "guardrail_check",
+  "ai_call",
+  "validation",
 ] as const;
 export type Intent = (typeof INTENTS)[number];
 
@@ -53,6 +54,9 @@ interface CanvasStore {
   /** conexão aguardando escolha de intent (picker aberto) */
   pendingConnection: Connection | null;
   sim: SimResult | null;
+  /** nó com o editor de propriedades aberto (botão ✎ no próprio componente) */
+  editingNodeId: string | null;
+  setEditingNode: (id: string | null) => void;
 
   load: (diagramId: string, nodes: CanvasNode[], edges: Edge[]) => void;
   onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
@@ -90,9 +94,14 @@ export const useCanvas = create<CanvasStore>()(
       rev: 0,
       pendingConnection: null,
       sim: null,
+      editingNodeId: null,
+      setEditingNode: (id) => set({ editingNodeId: id }),
 
       load: (diagramId, nodes, edges) => {
-        set({ diagramId, nodes, edges, rev: 0, pendingConnection: null, sim: null });
+        set({
+          diagramId, nodes, edges, rev: 0,
+          pendingConnection: null, sim: null, editingNodeId: null,
+        });
         useCanvas.temporal.getState().clear(); // histórico de undo não cruza diagramas
       },
 
@@ -123,6 +132,8 @@ export const useCanvas = create<CanvasStore>()(
                 id: newId("anchor"),
                 source: connection.source!,
                 target: connection.target!,
+                sourceHandle: connection.sourceHandle ?? undefined,
+                targetHandle: connection.targetHandle ?? undefined,
                 type: "intent",
                 data: { intent: "annotation" },
               },
@@ -145,6 +156,8 @@ export const useCanvas = create<CanvasStore>()(
               id: newId("e"),
               source: c.source!,
               target: c.target!,
+              sourceHandle: c.sourceHandle ?? undefined,
+              targetHandle: c.targetHandle ?? undefined,
               type: "intent",
               data: { intent },
             },
@@ -305,6 +318,14 @@ export const serializeCanvas = () => {
       .map(({ id, type, position, data }) => ({ id, type, position, data })),
     edges: edges
       .filter((e) => !(e.data as { ghost?: boolean } | undefined)?.ghost)
-      .map(({ id, source, target, type, data }) => ({ id, source, target, type, data })),
+      .map(({ id, source, target, sourceHandle, targetHandle, type, data }) => ({
+        id,
+        source,
+        target,
+        sourceHandle,
+        targetHandle,
+        type,
+        data,
+      })),
   };
 };

@@ -28,7 +28,7 @@ def test_resolve_semantic_refs_and_drop_unresolvable():
     d = diff([
         {"op": "add_node", "id": "new-g", "archetype": "guardrails", "name": "Guardrails"},
         {"op": "connect", "source": "archetype:llm-gateway", "target": "new-g",
-         "intent": "guardrail_check"},
+         "intent": "validation"},
         {"op": "connect", "source": "archetype:semantic-cache", "target": "new-g"},  # não existe
         {"op": "update_metadata", "id": "pg", "fields": {"subtitle": "read replica"}},
     ])
@@ -59,7 +59,7 @@ def test_prepare_diff_full_pipeline():
         "ops": [
             {"op": "add_node", "id": "new-g", "archetype": "guardrails", "name": "G"},
             {"op": "connect", "source": "archetype:llm-gateway", "target": "new-g",
-             "intent": "guardrail_check"},
+             "intent": "validation"},
         ],
     }
     result = prepare_diff(payload, CANVAS)

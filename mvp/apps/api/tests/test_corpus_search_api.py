@@ -27,4 +27,6 @@ async def test_search_without_active_release_is_empty(client):
 
 async def test_documents_lists_active_release(client, indexed_corpus):
     res = await client.get("/api/corpus/documents")
-    assert {d["doc_id"] for d in res.json()} == {"SEC-012", "GENAI-001", "REF-ARCH-RAG-01"}
+    assert {d["doc_id"] for d in res.json()} == {
+        "SEC-012", "GENAI-001", "REF-ARCH-RAG-01", "REL-005", "REL-007"
+    }

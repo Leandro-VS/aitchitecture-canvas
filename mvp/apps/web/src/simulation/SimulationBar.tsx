@@ -58,7 +58,7 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
 
   return (
     <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 select-none">
-      <div className="flex items-center gap-5 rounded-xl border border-white/10 bg-panel/95 px-4 py-2 shadow-xl backdrop-blur">
+      <div className="flex items-center gap-5 rounded-xl border border-white/10 bg-panel/95 px-4 py-2 shadow-xl">
         <button
           onClick={() => run.mutate()}
           disabled={run.isPending}
@@ -78,7 +78,7 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
           </div>
           <input type="range" min={0.5} max={10} step={0.5} value={multiplier}
             onChange={(e) => setMultiplier(Number(e.target.value))}
-            className="w-full accent-[#1458E8]" />
+            className="w-full accent-[#E8622C]" />
         </div>
 
         <div className="w-44">
@@ -87,7 +87,7 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
           </div>
           <input type="range" min={0} max={1} step={0.01} value={readRatio}
             onChange={(e) => setReadRatio(Number(e.target.value))}
-            className="w-full accent-[#1458E8]" />
+            className="w-full accent-[#E8622C]" />
           <div className="font-mono text-[9px] leading-none text-ink/45">
             {readLabel(readRatio)}
           </div>
@@ -115,7 +115,7 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
                 <label className={tinyLabel}>Cache hit — {Math.round(cacheHit * 100)}%</label>
                 <input type="range" min={0} max={1} step={0.01} value={cacheHit}
                   onChange={(e) => setCacheHit(Number(e.target.value))}
-                  className="w-full accent-[#1458E8]" />
+                  className="w-full accent-[#E8622C]" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>

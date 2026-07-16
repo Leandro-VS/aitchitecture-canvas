@@ -3,6 +3,8 @@ import { create } from "zustand";
 /** Sinais que os componentes emitem para as condições done_when do tutorial
  *  (as condições de canvas são lidas direto do useCanvas). */
 interface TutorialSignals {
+  /** tutorial em andamento — outros overlays (HUD) abrem espaço para o dock */
+  active: boolean;
   architectReplied: boolean;
   diffApplied: boolean;
   judgeCompleted: boolean;
@@ -16,6 +18,7 @@ interface TutorialSignals {
 }
 
 export const useTutorialSignals = create<TutorialSignals>()((set, get) => ({
+  active: false,
   architectReplied: false,
   diffApplied: false,
   judgeCompleted: false,

@@ -22,7 +22,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 INFINITE = float("inf")
-ASYNC_INTENTS = {"async_enqueue", "async_consume"}
+# async_message é o intent atual; enqueue/consume são legados de diagramas salvos
+ASYNC_INTENTS = {"async_message", "async_enqueue", "async_consume"}
 
 
 class SimParams(BaseModel):
@@ -204,11 +205,11 @@ def simulate(
             if e["target"] in seen:
                 continue
             intent = (e.get("data") or {}).get("intent", "request")
-            if intent == "async_enqueue":
-                # escrever na fila é síncrono (latência da fila conta);
+            if intent in ASYNC_INTENTS:
+                # publicar na fila é síncrono (latência da fila conta);
                 # o consumo além dela não entra no caminho do usuário
                 tails.append(metrics[e["target"]].latency_ms)
-            elif intent not in ASYNC_INTENTS:
+            else:
                 tails.extend(path_latencies(e["target"], seen | {e["target"]}))
         if not tails:
             return [own]

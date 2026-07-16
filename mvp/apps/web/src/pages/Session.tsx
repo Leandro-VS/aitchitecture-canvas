@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
   Controls,
   MiniMap,
   ReactFlow,
@@ -72,33 +73,27 @@ function Canvas() {
         e.dataTransfer.dropEffect = "move";
       }}
       fitView
+      connectionMode={ConnectionMode.Loose}
       deleteKeyCode={["Backspace", "Delete"]}
       proOptions={{ hideAttribution: true }}
-      className="bg-bg"
+      className="canvas-mat"
     >
-      <Background variant={BackgroundVariant.Dots} gap={48} color="rgba(59,130,246,.18)" />
+      {/* mesa de corte: grade fina + grade maior, acompanhando pan/zoom */}
+      <Background
+        id="mat-minor"
+        variant={BackgroundVariant.Lines}
+        gap={16}
+        color="rgba(255,255,255,.055)"
+      />
+      <Background
+        id="mat-major"
+        variant={BackgroundVariant.Lines}
+        gap={80}
+        color="rgba(255,255,255,.16)"
+      />
       <MiniMap pannable className="!bg-panel" position="bottom-right" />
       <Controls position="bottom-left" />
     </ReactFlow>
-  );
-}
-
-function ContextTab({ hasIntake, onClick }: { hasIntake: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      title={hasIntake ? "editar o contexto" : "obrigatório para usar os recursos de IA"}
-      className={`absolute left-0 top-1/2 z-20 -translate-y-1/2 select-none rounded-r-md
-        border border-l-0 px-1.5 py-4 font-mono text-[10px] uppercase tracking-widest
-        shadow-xl ${
-          hasIntake
-            ? "border-white/10 bg-panel text-ink/60 hover:text-ink"
-            : "border-amber-400/50 bg-panel text-amber-300 hover:text-amber-200"
-        }`}
-      style={{ writingMode: "vertical-rl", transform: "translateY(-50%) rotate(180deg)" }}
-    >
-      {hasIntake ? "Contexto" : "Contexto — pendente p/ IA"}
-    </button>
   );
 }
 
@@ -108,6 +103,7 @@ export function Session() {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [editingContext, setEditingContext] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [judgesOpen, setJudgesOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const tutorialActive = searchParams.get("tutorial") === "1";
 
@@ -115,6 +111,10 @@ export function Session() {
   useEffect(() => {
     useTutorialSignals.getState().reset();
   }, [id]);
+  // outros overlays (HUD) abrem espaço quando o dock do tutorial está visível
+  useEffect(() => {
+    useTutorialSignals.setState({ active: tutorialActive });
+  }, [tutorialActive]);
 
   const diagram = useQuery({
     queryKey: ["diagram", id],
@@ -195,6 +195,14 @@ export function Session() {
         </Link>
         <h1 className="truncate font-display text-sm font-semibold">{d.title}</h1>
         <button
+          onClick={() => setEditingContext(true)}
+          title="descrição, requisitos e restrições do diagrama"
+          className="rounded-md border border-white/10 px-2.5 py-1 font-mono text-[10px]
+                     uppercase tracking-widest text-ink/60 hover:border-primary/60 hover:text-ink"
+        >
+          Contexto
+        </button>
+        <button
           onClick={() => setExporting(true)}
           className="rounded-md border border-white/10 px-2.5 py-1 font-mono text-[10px]
                      uppercase tracking-widest text-ink/60 hover:border-primary/60 hover:text-ink"
@@ -216,18 +224,20 @@ export function Session() {
           <Palette />
           <SimulationBar diagramId={d.id} />
           <SimResults />
-          <PropertiesCard />
+          <PropertiesCard shiftLeft={judgesOpen} />
           <AskAI
             diagramId={d.id}
             hasIntake={d.intake !== null}
             onNeedContext={() => setEditingContext(true)}
+            shiftLeft={judgesOpen}
           />
           <JudgesRail
             diagramId={d.id}
             hasIntake={d.intake !== null}
             onNeedContext={() => setEditingContext(true)}
+            open={judgesOpen}
+            onToggle={setJudgesOpen}
           />
-          <ContextTab hasIntake={d.intake !== null} onClick={() => setEditingContext(true)} />
           {tutorialActive && (
             <TutorialOverlay
               diagramId={d.id}

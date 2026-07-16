@@ -5,7 +5,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 
-const ASYNC = new Set(["async_enqueue", "async_consume"]);
+const ASYNC = new Set(["async_message", "async_enqueue", "async_consume"]);
 
 export function IntentEdge(props: EdgeProps) {
   const [path, labelX, labelY] = getSmoothStepPath(props);
@@ -25,7 +25,7 @@ export function IntentEdge(props: EdgeProps) {
             : isAnchor
               ? "rgba(251,191,36,.5)"
               : props.selected
-                ? "#1458E8"
+                ? "#E8622C"
                 : "rgba(237,242,253,.35)",
           strokeWidth: props.selected ? 2 : 1.5,
           strokeDasharray: dashed ? "6 4" : undefined,

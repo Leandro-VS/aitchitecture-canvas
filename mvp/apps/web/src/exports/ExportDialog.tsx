@@ -19,7 +19,7 @@ async function captureCanvasPng(): Promise<string | null> {
   const pane = document.querySelector<HTMLElement>(".react-flow");
   if (!pane) return null;
   try {
-    return await toPng(pane, { backgroundColor: "#090F1B", pixelRatio: 2 });
+    return await toPng(pane, { backgroundColor: "#0d5c4d", pixelRatio: 2 });
   } catch {
     return null; // imagem é bônus — export segue sem ela
   }

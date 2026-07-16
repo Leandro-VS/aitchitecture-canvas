@@ -1,45 +1,45 @@
 {
   "content": {
-    "score": 74,
+    "score": 78,
     "verdict": "borderline",
     "strengths": [
       "O fluxo principal está explícito, com intents claras nas conexões — dá para auditar o caminho da requisição de ponta a ponta.",
-      "O contexto do intake declara requisitos e restrições, o que permite avaliar o desenho contra objetivos concretos."
+      "O contexto declara requisitos e restrições, o que permite avaliar o desenho contra objetivos concretos em vez de opinião."
     ],
     "findings": [
       {
-        "severity": "critical",
-        "component_refs": ["archetype:llm-gateway"],
+        "severity": "warning",
+        "component_refs": ["archetype:cache", "archetype:sql-db", "archetype:nosql-db"],
         "basis": "guideline",
         "citation": {
-          "doc_id": "SEC-012",
+          "doc_id": "REL-005",
           "section": "Regra",
-          "excerpt": "Todo fluxo em que a resposta de um LLM alcança um usuário externo DEVE passar por um componente de guardrail de saída antes da entrega."
+          "excerpt": "Caminhos de requisição com perfil de leitura dominante DEVEM ter uma camada de cache antes do armazenamento primário."
         },
-        "recommendation": "Não há Guardrails entre a saída do LLM e o usuário. Adicione um componente Guardrails no caminho de resposta (edge guardrail_check) antes da entrega em canal externo."
+        "recommendation": "Valide a estratégia de cache do caminho de leitura: chave, TTL/invalidação e taxa de hit esperada. Leituras dominantes não devem atingir o armazenamento primário no caminho crítico — confirme na simulação que o banco fica abaixo de 80% de utilização no cenário alvo."
       },
       {
         "severity": "warning",
-        "component_refs": ["archetype:llm-gateway", "archetype:semantic-cache"],
+        "component_refs": ["archetype:message-queue", "archetype:event-stream", "archetype:worker"],
         "basis": "guideline",
         "citation": {
-          "doc_id": "REF-ARCH-RAG-01",
-          "section": "Componentes obrigatórios",
-          "excerpt": "Semantic Cache: na frente do LLM Gateway em fluxos de pergunta-resposta; taxa de hit típica de 30–40% em atendimento reduz custo e p99."
+          "doc_id": "REL-007",
+          "section": "Regra",
+          "excerpt": "Operações de escrita que se propagam para múltiplos destinos NÃO DEVEM ser executadas de forma síncrona na requisição do usuário."
         },
-        "recommendation": "Fluxos de pergunta-resposta sem Semantic Cache pagam o custo integral de inferência em toda requisição. Coloque um Semantic Cache com cache_lookup na frente do LLM Gateway."
+        "recommendation": "Escritas com fan-out devem sair do caminho síncrono: publique em fila e materialize com workers. Se a fila já existe no desenho, defina retry e dead-letter e dimensione os consumidores pela vazão de escrita × fan-out médio."
       },
       {
         "severity": "warning",
-        "component_refs": ["archetype:sql-db"],
+        "component_refs": ["archetype:sql-db", "archetype:nosql-db"],
         "basis": "general",
-        "recommendation": "O banco relacional aparece como dependência síncrona única no caminho crítico. Avalie réplicas de leitura ou um cache na frente para o perfil read-heavy declarado no intake."
+        "recommendation": "Componentes stateful no caminho crítico sem réplicas configuradas são ponto único de falha. Avalie réplicas de leitura e distribuição multi-AZ para o armazenamento; a disponibilidade alvo do contexto deve guiar o número de réplicas."
       },
       {
         "severity": "info",
         "component_refs": [],
         "basis": "general",
-        "recommendation": "Use os balões de comentário para registrar decisões já tomadas (ex.: tecnologias mandatórias) — as avaliações passam a respeitá-las como restrições do autor."
+        "recommendation": "Registre decisões já tomadas (tecnologias mandatórias, restrições de time) como balões de comentário ancorados aos componentes — as avaliações passam a respeitá-las como restrições do autor e o pré-ADR as documenta."
       }
     ]
   }

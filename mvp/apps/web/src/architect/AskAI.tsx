@@ -20,6 +20,8 @@ interface Props {
   diagramId: string;
   hasIntake: boolean;
   onNeedContext: () => void;
+  /** painel do AI Judge aberto → empurra o Ask AI para a esquerda */
+  shiftLeft: boolean;
 }
 
 function DiffCard({ message, labelOf, ghostOrigin }: {
@@ -78,7 +80,7 @@ function DiffCard({ message, labelOf, ghostOrigin }: {
         <div className="mt-1 flex flex-wrap gap-1">
           {diff.citations.map((c, i) => (
             <span key={i} title={c.excerpt}
-              className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[9px] text-sky-300">
+              className="rounded bg-cyan-400/10 px-1.5 py-0.5 font-mono text-[9px] text-cyan-200">
               {c.doc_id} &gt; {c.section}
             </span>
           ))}
@@ -122,7 +124,7 @@ function DiffCard({ message, labelOf, ghostOrigin }: {
   );
 }
 
-export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
+export function AskAI({ diagramId, hasIntake, onNeedContext, shiftLeft }: Props) {
   const queryClient = useQueryClient();
   const { screenToFlowPosition } = useReactFlow();
   const [open, setOpen] = useState(false);
@@ -217,9 +219,9 @@ export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
       <button
         onClick={() => (hasIntake ? setOpen(true) : onNeedContext())}
         title={hasIntake ? "converse com o Arquiteto" : "requer o contexto preenchido"}
-        className="absolute right-3 top-3 z-20 flex select-none items-center gap-2 rounded-full
-                   border border-primary/50 bg-panel/95 px-4 py-2 shadow-xl backdrop-blur
-                   hover:border-primary"
+        className="absolute top-3 z-20 flex select-none items-center gap-2 rounded-full
+                   border border-primary/50 bg-panel px-4 py-2 shadow-xl hover:border-primary"
+        style={{ right: shiftLeft ? 340 : 12 }}
       >
         <span className="text-base">💬</span>
         <span className="font-display text-sm font-semibold text-ink">Ask AI</span>
@@ -228,8 +230,11 @@ export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
   }
 
   return (
-    <aside className="absolute bottom-3 right-3 top-3 z-30 flex w-96 select-none flex-col
-                      rounded-xl border border-white/10 bg-panel/95 shadow-2xl backdrop-blur">
+    <aside
+      className="absolute bottom-3 top-3 z-30 flex w-96 select-none flex-col rounded-xl
+                 border border-white/10 bg-panel shadow-2xl"
+      style={{ right: shiftLeft ? 340 : 12 }}
+    >
       <header className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <span>💬</span>
         <h2 className="font-display text-sm font-semibold">Ask AI</h2>
@@ -241,7 +246,10 @@ export function AskAI({ diagramId, hasIntake, onNeedContext }: Props) {
         </button>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+      <div
+        ref={scrollRef}
+        className="panel-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3"
+      >
         {messages.data?.length === 0 && streaming === null && (
           <p className="text-xs leading-relaxed text-ink/50">
             Pergunte sobre o seu desenho — o Arquiteto vê o canvas, o contexto, os

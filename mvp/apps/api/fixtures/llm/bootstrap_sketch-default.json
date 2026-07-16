@@ -25,8 +25,8 @@
       {"op": "connect", "source": "sk-gw", "target": "sk-app", "intent": "request"},
       {"op": "connect", "source": "sk-app", "target": "sk-semcache", "intent": "cache_lookup"},
       {"op": "connect", "source": "sk-app", "target": "sk-vdb", "intent": "retrieval"},
-      {"op": "connect", "source": "sk-app", "target": "sk-llm", "intent": "llm_call"},
-      {"op": "connect", "source": "sk-llm", "target": "sk-guard", "intent": "guardrail_check"}
+      {"op": "connect", "source": "sk-app", "target": "sk-llm", "intent": "ai_call"},
+      {"op": "connect", "source": "sk-llm", "target": "sk-guard", "intent": "validation"}
     ]
   }
 }

@@ -49,13 +49,14 @@ interface Props {
   onFinish: () => void;
 }
 
-/** Dock do tutorial (M14): passos declarativos, ações bloqueiam o Next até a
- *  condição ser satisfeita observando os stores. Progresso em localStorage. */
+/** Dock do tutorial (M14): passos declarativos com Voltar/Próximo; ações
+ *  bloqueiam o avanço até a condição real acontecer. Progresso em localStorage. */
 export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
   const [index, setIndex] = useState(() => {
     const saved = Number(localStorage.getItem(storageKey(diagramId)));
     return Number.isFinite(saved) ? Math.min(saved, TUTORIAL_STEPS.length - 1) : 0;
   });
+  const [minimized, setMinimized] = useState(false);
   const suggestPrompt = useTutorialSignals((s) => s.suggestPrompt);
 
   const step = TUTORIAL_STEPS[index];
@@ -72,9 +73,49 @@ export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
     onFinish();
   };
 
+  if (minimized) {
+    // minimizado ≠ sumido: o passo atual continua visível para o tutorial não
+    // perder o fio — clique (ou ▴) expande de volta
+    return (
+      <button
+        onClick={() => setMinimized(false)}
+        title="expandir o tutorial"
+        className="absolute bottom-3 left-1/2 z-40 flex max-w-[70%] -translate-x-1/2
+                   select-none items-center gap-2 rounded-full border border-primary/40
+                   bg-panel px-4 py-1.5 shadow-xl"
+      >
+        <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-ink/50">
+          tutorial {index + 1}/{TUTORIAL_STEPS.length}
+        </span>
+        <span className="truncate text-xs text-ink/85">{step.title}</span>
+        {step.kind === "action" && (
+          <span
+            className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase
+              tracking-widest ${
+                satisfied
+                  ? "bg-emerald-400/15 text-emerald-300"
+                  : "bg-amber-400/15 text-amber-300"
+              }`}
+          >
+            {satisfied ? "feito ✓" : "ação"}
+          </span>
+        )}
+        <span className="shrink-0 text-ink/50">▴</span>
+      </button>
+    );
+  }
+
   return (
     <div className="absolute inset-x-0 bottom-0 z-40 select-none border-t border-primary/40
-                    bg-panel/95 px-4 py-3 shadow-2xl backdrop-blur">
+                    bg-panel px-4 py-2.5 pr-10 shadow-2xl">
+      <button
+        onClick={() => setMinimized(true)}
+        title="minimizar o tutorial (o passo atual continua visível)"
+        className="absolute right-2 top-2 rounded px-1.5 text-sm text-ink/40
+                   hover:bg-white/10 hover:text-ink"
+      >
+        ▾
+      </button>
       <div className="mx-auto flex max-w-4xl items-start gap-4">
         <div className="mt-0.5 shrink-0 text-center">
           <div className="font-mono text-[10px] uppercase tracking-widest text-ink/40">
@@ -107,7 +148,13 @@ export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
               </span>
             )}
           </h3>
-          <p className="mt-0.5 text-xs leading-relaxed text-ink/70">{step.body}</p>
+          {/* whitespace-pre-line preserva quebras/identação; select-text libera
+              copiar/colar (o dock é select-none para os controles) */}
+          <p className="panel-scroll mt-0.5 max-h-40 cursor-text select-text overflow-y-auto
+                        overscroll-contain whitespace-pre-line text-xs leading-relaxed
+                        text-ink/70">
+            {step.body}
+          </p>
           {step.suggested_prompt && !satisfied && (
             <button
               onClick={() => suggestPrompt(step.suggested_prompt!)}
@@ -122,6 +169,14 @@ export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
         <div className="flex shrink-0 items-center gap-2 self-center">
           <button onClick={finish} className="text-xs text-ink/40 hover:text-ink">
             Pular tutorial
+          </button>
+          <button
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+            className="rounded-md border border-white/15 px-3 py-1.5 text-sm text-ink/70
+                       hover:border-primary/60 disabled:opacity-30"
+          >
+            ← Voltar
           </button>
           <button
             onClick={() => (isLast ? finish() : setIndex((i) => i + 1))}

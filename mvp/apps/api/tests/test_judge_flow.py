@@ -53,15 +53,16 @@ async def test_judge_run_executes_with_mock_fixture(client, indexed_corpus):
         await execute_judge_run(session, run, redis=None)
 
         assert run.status == "done"
-        assert run.score == 74
+        assert run.score == 78
         assert run.verdict == "borderline"
         findings = (
             await session.scalars(select(JudgeFinding).where(JudgeFinding.run_id == run.id))
         ).all()
         assert len(findings) == 4
-        critical = next(f for f in findings if f.severity == "critical")
-        assert critical.citation["doc_id"] == "SEC-012"
-        assert critical.component_refs == ["gw"]  # archetype:llm-gateway resolvido
+        cache_finding = next(f for f in findings if f.citation and f.citation["doc_id"] == "REL-005")
+        assert cache_finding.component_refs == ["db"]  # archetype:sql-db resolvido
+        queue_finding = next(f for f in findings if f.citation and f.citation["doc_id"] == "REL-007")
+        assert queue_finding.component_refs == []  # sem fila neste canvas → refs descartadas
         general = [f for f in findings if f.basis == "general"]
         assert all(f.citation is None for f in general)
         run_id = run.id
@@ -69,7 +70,7 @@ async def test_judge_run_executes_with_mock_fixture(client, indexed_corpus):
     # API expõe o run com findings (polling do painel)
     res = await client.get(f"/api/judges/runs/{run_id}")
     assert res.status_code == 200
-    assert res.json()["score"] == 74
+    assert res.json()["score"] == 78
     assert len(res.json()["findings"]) == 4
 
     # feedback e resolve (métricas H2)
