@@ -19,12 +19,13 @@ import { ArchNode } from "../canvas/ArchNode";
 import { IntentEdge } from "../canvas/IntentEdge";
 import { IntentPicker } from "../canvas/IntentPicker";
 import { ARCHETYPE_DRAG_TYPE, Palette } from "../canvas/Palette";
-import { PropertiesPanel } from "../canvas/PropertiesPanel";
+import { PropertiesCard } from "../canvas/PropertiesCard";
 import { serializeCanvas, useCanvas, type CanvasNode } from "../canvas/store";
 import { IntakeForm } from "../intake/IntakeForm";
 import { toFormValues, toIntakePayload } from "../intake/schema";
-import { JudgePanel } from "../judges/JudgePanel";
-import { SimulationPanel } from "../simulation/SimulationPanel";
+import { JudgesRail } from "../judges/JudgesRail";
+import { SimResults } from "../simulation/SimResults";
+import { SimulationBar } from "../simulation/SimulationBar";
 
 const nodeTypes = { arch: ArchNode, annotation: AnnotationNode };
 const edgeTypes = { intent: IntentEdge };
@@ -72,9 +73,28 @@ function Canvas() {
       className="bg-bg"
     >
       <Background variant={BackgroundVariant.Dots} gap={48} color="rgba(59,130,246,.18)" />
-      <MiniMap pannable className="!bg-panel" />
-      <Controls />
+      <MiniMap pannable className="!bg-panel" position="bottom-right" />
+      <Controls position="bottom-left" />
     </ReactFlow>
+  );
+}
+
+function ContextTab({ hasIntake, onClick }: { hasIntake: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={hasIntake ? "editar o contexto" : "obrigatório para usar os recursos de IA"}
+      className={`absolute left-0 top-1/2 z-20 -translate-y-1/2 select-none rounded-r-md
+        border border-l-0 px-1.5 py-4 font-mono text-[10px] uppercase tracking-widest
+        shadow-xl ${
+          hasIntake
+            ? "border-white/10 bg-panel text-ink/60 hover:text-ink"
+            : "border-amber-400/50 bg-panel text-amber-300 hover:text-amber-200"
+        }`}
+      style={{ writingMode: "vertical-rl", transform: "translateY(-50%) rotate(180deg)" }}
+    >
+      {hasIntake ? "Contexto" : "Contexto — pendente p/ IA"}
+    </button>
   );
 }
 
@@ -162,16 +182,6 @@ export function Session() {
           ← diagramas
         </Link>
         <h1 className="truncate font-display text-sm font-semibold">{d.title}</h1>
-        <button
-          onClick={() => setEditingContext(true)}
-          title={d.intake ? undefined : "obrigatório para usar os recursos de IA"}
-          className={`rounded-md border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest
-            ${d.intake
-              ? "border-white/10 text-ink/60 hover:border-primary/60"
-              : "border-amber-400/50 text-amber-300 hover:border-amber-300"}`}
-        >
-          Contexto{!d.intake && " — pendente p/ IA"}
-        </button>
         <span
           className={`ml-auto font-mono text-[10px] uppercase tracking-widest ${
             saveState === "error" ? "text-red-400" : "text-ink/40"
@@ -181,38 +191,20 @@ export function Session() {
         </span>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <Palette />
-        <main className="min-w-0 flex-1">
-          <ReactFlowProvider>
-            <Canvas />
-          </ReactFlowProvider>
-        </main>
-        {/* select-none: arrastar sliders não pode sair selecionando texto/canvas */}
-        <aside className="w-72 shrink-0 select-none space-y-5 overflow-y-auto border-l border-white/10 bg-panel p-3">
-          <section>
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">
-              Simulação
-            </h2>
-            <SimulationPanel diagramId={d.id} />
-          </section>
-          <section className="border-t border-white/10 pt-4">
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">
-              Juiz
-            </h2>
-            <JudgePanel
-              diagramId={d.id}
-              hasIntake={d.intake !== null}
-              onNeedContext={() => setEditingContext(true)}
-            />
-          </section>
-          <section className="border-t border-white/10 pt-4">
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/50">
-              Propriedades
-            </h2>
-            <PropertiesPanel />
-          </section>
-        </aside>
+      <div className="relative min-h-0 flex-1">
+        <ReactFlowProvider>
+          <Canvas />
+          <Palette />
+          <SimulationBar diagramId={d.id} />
+          <SimResults />
+          <PropertiesCard />
+          <JudgesRail
+            diagramId={d.id}
+            hasIntake={d.intake !== null}
+            onNeedContext={() => setEditingContext(true)}
+          />
+          <ContextTab hasIntake={d.intake !== null} onClick={() => setEditingContext(true)} />
+        </ReactFlowProvider>
       </div>
 
       <IntentPicker />

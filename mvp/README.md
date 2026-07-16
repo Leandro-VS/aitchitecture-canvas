@@ -86,7 +86,7 @@ Notas de dev:
 - [x] **Fase 2 — Metadados, comentários, simulador** (US2/US3)
 - [x] **Fase 3 — Corpus + busca** (M6)
 - [x] **Fase 4 — Juiz único** (US5)
-- [ ] **Fase 4.5 — Passe de UX do playground** (referência: System Design Playground)
+- [x] **Fase 4.5 — Passe de UX do playground** (referência: System Design Playground)
   - Controles de simulação saem do rail direito para uma **barra flutuante no topo
     do canvas**: botão Start, Speed, Traffic e slider Reads vs writes com rótulo
     interpretado ("92% read · Read-heavy · Hot read path")
