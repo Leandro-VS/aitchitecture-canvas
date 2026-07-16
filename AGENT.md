@@ -1,7 +1,7 @@
 # AGENT.md — guia de contexto para agentes
 
 Este arquivo orienta um agente Claude começando uma sessão limpa neste repo.
-Leia-o antes de qualquer mudança. Última atualização: 16/07/2026 (fim da Fase 5).
+Leia-o antes de qualquer mudança. Última atualização: 16/07/2026 (fim da Fase 6 — MVP completo, aguardando verificação final do Leandro).
 
 ## O que é o projeto
 
@@ -11,10 +11,11 @@ software com **IA dedicada na mesma tela**. Engenheiros desenham arquiteturas
 
 - **Arquiteto IA ("Ask AI")** — chat com contexto do desenho que responde
   dúvidas e propõe mudanças estruturais como *ghost nodes* (Apply/Dismiss);
+- **Tutorial guiado** — dock de passos que percorre todo o produto com IA mockada;
 - **Juiz IA** — avalia o diagrama contra guidelines corporativos (RAG) com
   score, verdict e findings **sempre citando doc + seção** (decisão D15);
 - **Simulador determinístico** — carga, gargalos, p99, disponibilidade;
-- **Export pré-ADR** (Fase 6, pendente) — a sessão vira documento.
+- **Export pré-ADR** — a sessão vira documento Markdown + PNG revisável;
 
 As **specs completas** vivem FORA do repo, no diretório pai:
 `../ADR/blueprint-mvp.md` (escopo M1–M14 do MVP), `../ADR/blueprint-implementacao.md`
@@ -72,11 +73,14 @@ Registradas em conversa com o Leandro (dono do projeto) — prevalecem sobre os 
 - [x] Fase 4 — Juiz único: fixtures, D15 no schema, cache por hash, painel de findings (US5)
 - [x] Fase 4.5 — Passe de UX do playground
 - [x] Fase 5 — Ask AI (chat SSE + ghost diff) e bootstrap por linguagem natural (US4/M13)
-- [ ] **Fase 6 — Export pré-ADR (Markdown + PNG via Jinja2/MinIO) e tutorial
-  guiado (M14/D14: engine de overlay declarativa + roteiro + fixtures)** ← próxima
+- [x] Fase 6 — Export pré-ADR (Jinja2 → MD+PNG no MinIO, rascunho IA editável)
+  e tutorial guiado (dock declarativa, 15 passos do encurtador de URL) — **MVP completo**
+
+**Não há próxima fase planejada**: o escopo M1–M14 do MVP está implementado.
+Trabalho futuro = backlog pós-validação (fim deste arquivo) ou pedidos novos do Leandro.
 
 Cada fase foi commitada separadamente com mensagem descritiva — `git log` é a
-melhor linha do tempo. Migrations Alembic 0001–0007 aplicadas.
+melhor linha do tempo. Migrations Alembic 0001–0008.
 
 ## Layout do repo
 
@@ -99,11 +103,11 @@ airchitecture/
         │   │   ├── architect/   # diff (ProposedDiff), bootstrap
         │   │   └── llm/         # LLMClient (Protocol), mock, parse_with_retry
         │   ├── fixtures/llm/    # respostas roteirizadas do "LLM"
-        │   ├── migrations/      # alembic 0001–0007
-        │   └── tests/           # 53 testes; API tests usam DB blueprint_test isolado
+        │   ├── migrations/      # alembic 0001–0008
+        │   └── tests/           # 56 testes; API tests usam DB blueprint_test isolado
         └── web/          # React 18 + Vite + TS + Tailwind v4 + React Flow
             └── src/      # canvas/ (store zustand+zundo), simulation/, judges/,
-                          # architect/ (AskAI), intake/, pages/
+                          # architect/ (AskAI), intake/, exports/, tutorial/, pages/
 ```
 
 ## Como rodar / verificar
@@ -148,7 +152,17 @@ eles pulam sozinhos se o Postgres estiver fora).
 - **Simulação/Juiz/Chat** aceitam `canvas_state` no body (estado da tela pode
   estar à frente do autosave de 5s) — mantenha esse padrão em endpoints novos.
 - Testes entre módulos: `tests/` não é pacote; fixtures compartilhadas vivem no
-  `conftest.py` (`_state["maker"]` dá acesso ao sessionmaker do DB de teste).
+  `conftest.py` (`_state["maker"]` dá acesso ao sessionmaker do DB de teste). O
+  conftest também exporta env do MinIO local (S3_ENDPOINT_URL etc.) antes dos
+  imports — testes de export falam com o MinIO do compose.
+- **Fixture por prompt**: no chat do Arquiteto a pergunta do usuário é a ÚLTIMA
+  mensagem, isolada — o MockLLMClient resolve `architect-{sha256(pergunta)[:8]}.json`.
+  A pergunta sugerida do tutorial ("Como reduzo a carga de leitura no banco?")
+  tem fixture própria (`architect-00d0c2b4.json`, propõe Cache); qualquer outra
+  pergunta cai no `architect-default.json` (propõe Guardrails).
+- **Sinais do tutorial** (`tutorial/signals.ts`): AskAI/DiffCard/JudgePanel/
+  ExportDialog emitem flags que as condições `done_when` observam; condições de
+  canvas são lidas direto do useCanvas. Resetados ao trocar de diagrama.
 
 ## O que vem depois do MVP (pós-validação, fora de escopo agora)
 

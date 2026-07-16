@@ -19,3 +19,6 @@ mvp/apps/web/src/types/
 .env
 .env.local
 .DS_Store
+
+# cache do pnpm (container)
+mvp/apps/web/.pnpm-store/
