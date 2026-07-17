@@ -11,7 +11,7 @@ import {
 import { temporal } from "zundo";
 import { create } from "zustand";
 
-import type { ProposedDiff, SimResult } from "../api/client";
+import type { ProposedDiff, SimParams, SimResult } from "../api/client";
 import { dagreLayout } from "./layout";
 
 // Intents genéricos — servem system design tradicional e sistemas com IA
@@ -22,6 +22,7 @@ export const INTENTS = [
   "retrieval",
   "ai_call",
   "validation",
+  "dead_letter",
 ] as const;
 export type Intent = (typeof INTENTS)[number];
 
@@ -54,11 +55,12 @@ interface CanvasStore {
   /** conexão aguardando escolha de intent (picker aberto) */
   pendingConnection: Connection | null;
   sim: SimResult | null;
+  simParams: SimParams;
   /** nó com o editor de propriedades aberto (botão ✎ no próprio componente) */
   editingNodeId: string | null;
   setEditingNode: (id: string | null) => void;
 
-  load: (diagramId: string, nodes: CanvasNode[], edges: Edge[]) => void;
+  load: (diagramId: string, nodes: CanvasNode[], edges: Edge[], simParams?: SimParams | null) => void;
   onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -67,7 +69,9 @@ interface CanvasStore {
   addFromPalette: (archetype: string, label: string, position: XYPosition) => void;
   addAnnotation: (position: XYPosition) => void;
   updateNodeData: (id: string, fields: Record<string, unknown>) => void;
+  updateEdgeData: (id: string, fields: Record<string, unknown>) => void;
   setSim: (sim: SimResult | null) => void;
+  setSimParams: (fields: Partial<SimParams>) => void;
   selectNodes: (ids: string[]) => void;
 
   /** diffs propostos pelo Arquiteto, indexados pelo message_id */
@@ -85,6 +89,15 @@ interface CanvasStore {
 let seq = 0;
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${seq++}`;
 
+export const DEFAULT_SIM_PARAMS: SimParams = {
+  base_rps: 100,
+  traffic_multiplier: 1,
+  read_ratio: 0.8,
+  cache_hit_rate: 0.8,
+  p99_target_ms: null,
+  availability_target_pct: null,
+};
+
 export const useCanvas = create<CanvasStore>()(
   temporal(
     (set, get) => ({
@@ -94,13 +107,15 @@ export const useCanvas = create<CanvasStore>()(
       rev: 0,
       pendingConnection: null,
       sim: null,
+      simParams: DEFAULT_SIM_PARAMS,
       editingNodeId: null,
       setEditingNode: (id) => set({ editingNodeId: id }),
 
-      load: (diagramId, nodes, edges) => {
+      load: (diagramId, nodes, edges, simParams) => {
         set({
           diagramId, nodes, edges, rev: 0,
           pendingConnection: null, sim: null, editingNodeId: null,
+          simParams: { ...DEFAULT_SIM_PARAMS, ...simParams },
         });
         useCanvas.temporal.getState().clear(); // histórico de undo não cruza diagramas
       },
@@ -203,7 +218,26 @@ export const useCanvas = create<CanvasStore>()(
           ),
         })),
 
+      updateEdgeData: (id, fields) =>
+        set((s) => ({
+          rev: s.rev + 1,
+          edges: s.edges.map((edge) =>
+            edge.id === id ? { ...edge, data: { ...edge.data, ...fields } } : edge,
+          ),
+        })),
+
       setSim: (sim) => set({ sim }), // não bumpa rev: resultado não é conteúdo do canvas
+      setSimParams: (fields) =>
+        set((s) => {
+          const simParams = { ...s.simParams, ...fields };
+          if (s.diagramId) {
+            window.localStorage.setItem(
+              `blueprint-sim-params:${s.diagramId}`,
+              JSON.stringify(simParams),
+            );
+          }
+          return { simParams, rev: s.rev + 1 };
+        }),
 
       selectNodes: (ids) =>
         set((s) => ({
@@ -310,7 +344,7 @@ export const useCanvas = create<CanvasStore>()(
 );
 
 export const serializeCanvas = () => {
-  const { nodes, edges } = useCanvas.getState();
+  const { nodes, edges, simParams } = useCanvas.getState();
   // ghosts (sugestões não aceitas) nunca entram no autosave/simulação/juiz
   return {
     nodes: nodes
@@ -327,5 +361,6 @@ export const serializeCanvas = () => {
         type,
         data,
       })),
+    simulation_params: simParams,
   };
 };

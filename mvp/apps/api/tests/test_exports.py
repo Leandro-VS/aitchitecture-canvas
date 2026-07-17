@@ -11,12 +11,24 @@ INTAKE = {
 
 CANVAS = {
     "nodes": [
-        {"id": "c1", "type": "arch", "position": {"x": 0, "y": 0},
-         "data": {"archetype": "client", "label": "Client (Web)", "name": "Cliente"}},
-        {"id": "app", "type": "arch", "position": {"x": 200, "y": 0},
-         "data": {"archetype": "app-server", "label": "App Server", "name": "redirector"}},
-        {"id": "note", "type": "annotation", "position": {"x": 0, "y": 100},
-         "data": {"text": "mapeia short-code para URL"}},
+        {
+            "id": "c1",
+            "type": "arch",
+            "position": {"x": 0, "y": 0},
+            "data": {"archetype": "client", "label": "Client (Web)", "name": "Cliente"},
+        },
+        {
+            "id": "app",
+            "type": "arch",
+            "position": {"x": 200, "y": 0},
+            "data": {"archetype": "app-server", "label": "App Server", "name": "redirector"},
+        },
+        {
+            "id": "note",
+            "type": "annotation",
+            "position": {"x": 0, "y": 100},
+            "data": {"text": "mapeia short-code para URL"},
+        },
     ],
     "edges": [
         {"id": "e1", "source": "c1", "target": "app", "data": {"intent": "request"}},
@@ -41,12 +53,18 @@ async def test_export_renders_md_and_uploads(client, seed_archetypes):
         json={"diagram_id": created["id"], "params": {"base_rps": 100}},
     )
 
-    res = await client.post("/api/exports", json={
-        "diagram_id": created["id"],
-        "sections": {"context": "Contexto revisado.", "decision": "Decisão X.",
-                     "consequences": "Consequências Y."},
-        "png_data_url": TINY_PNG,
-    })
+    res = await client.post(
+        "/api/exports",
+        json={
+            "diagram_id": created["id"],
+            "sections": {
+                "context": "Contexto revisado.",
+                "decision": "Decisão X.",
+                "consequences": "Consequências Y.",
+            },
+            "png_data_url": TINY_PNG,
+        },
+    )
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["png_url"] is not None
@@ -70,6 +88,51 @@ async def test_export_works_without_intake(client):
     assert res.status_code == 201
     md = httpx.get(res.json()["md_url"]).text
     assert "_a preencher_" in md
+
+
+async def test_preview_uses_current_canvas_without_creating_export(client):
+    created = (
+        await client.post(
+            "/api/diagrams",
+            json={
+                "title": "Prévia local",
+                "intake": {"summary": "Rascunho ainda incompleto"},
+            },
+        )
+    ).json()
+    preview_canvas = {
+        **CANVAS,
+        "nodes": [
+            *CANVAS["nodes"],
+            {
+                "id": "preview",
+                "type": "arch",
+                "position": {"x": 400, "y": 0},
+                "data": {"archetype": "cache", "label": "Cache", "name": "Só na prévia"},
+            },
+        ],
+    }
+
+    res = await client.post(
+        "/api/exports/preview",
+        json={
+            "diagram_id": created["id"],
+            "sections": {
+                "context": "Antes de gerar.",
+                "decision": "Revisar.",
+                "consequences": "Nenhum arquivo ainda.",
+            },
+            "canvas_state": preview_canvas,
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert "# Prévia local" in res.json()["markdown"]
+    assert "Só na prévia" in res.json()["markdown"]
+    assert "None" not in res.json()["markdown"]
+    assert "**Considerações e restrições:** _a preencher_" in res.json()["markdown"]
+
+    listed = (await client.get("/api/exports", params={"diagram_id": created["id"]})).json()
+    assert listed == []
 
 
 async def test_draft_requires_intake_and_uses_fixture(client):

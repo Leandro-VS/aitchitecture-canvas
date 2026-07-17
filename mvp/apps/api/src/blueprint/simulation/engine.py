@@ -8,10 +8,12 @@ síncrono, disponibilidade, bottleneck e advisor tips.
 Regras de propagação (escopo MVP — sem tokens, chaos ou agent loop):
 - fan-out: cada out-edge recebe o inflow do nó (toda dependência é tocada);
 - cache_lookup: o cache recebe a fração de leituras (read_ratio); as demais
-  out-edges do mesmo nó recebem inflow * (1 - read_ratio * cache_hit_rate) —
-  hit não segue adiante, escrita e miss seguem;
+  out-edges recebem os misses de leitura; escritas seguem pelo caminho síncrono
+  ou, quando existe async_message irmão, apenas pelo caminho assíncrono;
 - edges async (async_enqueue) entregam tráfego, mas o caminho síncrono do
   usuário termina na fila (consumidores não entram no p99).
+- dead_letter recebe somente a fração de falhas do componente de origem
+  (1% por padrão, configurável no edge), nunca o volume integral do caminho principal.
 
 Determinismo: mesmo input → mesmo output (funções puras, ordenação estável).
 Nós de anotação (D13) são ignorados.
@@ -24,6 +26,8 @@ from pydantic import BaseModel, Field
 INFINITE = float("inf")
 # async_message é o intent atual; enqueue/consume são legados de diagramas salvos
 ASYNC_INTENTS = {"async_message", "async_enqueue", "async_consume"}
+DEAD_LETTER_INTENT = "dead_letter"
+DEFAULT_DLQ_FAILURE_RATE = 0.01
 
 
 class SimParams(BaseModel):
@@ -129,17 +133,18 @@ def simulate(
     params: SimParams,
     archetypes: dict[str, ArchetypeSpec],
 ) -> SimResult:
-    targets = Targets(
-        p99_ms=params.p99_target_ms, availability_pct=params.availability_target_pct
-    )
+    targets = Targets(p99_ms=params.p99_target_ms, availability_pct=params.availability_target_pct)
     nodes = [
-        n for n in canvas_state.get("nodes", [])
+        n
+        for n in canvas_state.get("nodes", [])
         if n.get("type") != "annotation" and n.get("data", {}).get("archetype") in archetypes
     ]
     node_by_id = {n["id"]: n for n in nodes}
     edges = [
-        e for e in canvas_state.get("edges", [])
-        if e.get("source") in node_by_id and e.get("target") in node_by_id
+        e
+        for e in canvas_state.get("edges", [])
+        if e.get("source") in node_by_id
+        and e.get("target") in node_by_id
         and (e.get("data") or {}).get("intent") != "annotation"
     ]
     out_edges: dict[str, list[dict]] = {}
@@ -147,8 +152,15 @@ def simulate(
         out_edges.setdefault(e["source"], []).append(e)
 
     empty = SimResult(
-        total_rps=0, avg_latency_ms=0, p99_ms=0, error_rate=0, availability_pct=100,
-        bottleneck=None, nodes={}, tips=[], targets=targets,
+        total_rps=0,
+        avg_latency_ms=0,
+        p99_ms=0,
+        error_rate=0,
+        availability_pct=100,
+        bottleneck=None,
+        nodes={},
+        tips=[],
+        targets=targets,
     )
     if not nodes:
         return empty
@@ -172,14 +184,52 @@ def simulate(
     for nid in _topological_order(sorted(node_by_id), out_edges):
         outs = out_edges.get(nid, [])
         has_cache = any((e.get("data") or {}).get("intent") == "cache_lookup" for e in outs)
+        has_async_write_path = any(
+            (e.get("data") or {}).get("intent") in ASYNC_INTENTS for e in outs
+        )
+        dead_letter_edges = [
+            e for e in outs if (e.get("data") or {}).get("intent") == DEAD_LETTER_INTENT
+        ]
+        source_spec = spec(nid)
+        replicas = max(1, int(node_by_id[nid].get("data", {}).get("replicas") or 1))
+        source_capacity = (
+            INFINITE if source_spec.base_rps is None else source_spec.base_rps * replicas
+        )
+        source_cpu = 0.0 if source_capacity == INFINITE else inflow[nid] / source_capacity
+        configured_failure = max(
+            (
+                float((e.get("data") or {}).get("failure_rate", DEFAULT_DLQ_FAILURE_RATE))
+                for e in dead_letter_edges
+            ),
+            default=0.0,
+        )
+        failure_fraction = max(
+            0.0,
+            min(1.0, max(configured_failure, _error_rate(source_cpu))),
+        )
         for e in outs:
-            intent = (e.get("data") or {}).get("intent", "request")
-            if has_cache and intent == "cache_lookup":
+            edge_data = e.get("data") or {}
+            intent = edge_data.get("intent", "request")
+            if intent == DEAD_LETTER_INTENT:
+                share = inflow[nid] * failure_fraction
+            elif has_cache and intent == "cache_lookup":
                 share = inflow[nid] * params.read_ratio
+            elif has_cache and intent in ASYNC_INTENTS:
+                # Com cache no mesmo fan-out, o caminho assíncrono representa
+                # as escritas. Leituras seguem cache → storage somente no miss.
+                share = inflow[nid] * (1 - params.read_ratio)
             elif has_cache:
-                share = inflow[nid] * (1 - params.read_ratio * params.cache_hit_rate)
+                read_misses = inflow[nid] * params.read_ratio * (1 - params.cache_hit_rate)
+                synchronous_writes = (
+                    0.0 if has_async_write_path else inflow[nid] * (1 - params.read_ratio)
+                )
+                share = read_misses + synchronous_writes
             else:
                 share = inflow[nid]
+            if dead_letter_edges and intent != DEAD_LETTER_INTENT:
+                # O item que falhou segue para a DLQ, não também para o destino
+                # de sucesso do worker.
+                share *= 1 - failure_fraction
             inflow[e["target"]] += share
 
     # --- métricas por nó ---
@@ -205,7 +255,7 @@ def simulate(
             if e["target"] in seen:
                 continue
             intent = (e.get("data") or {}).get("intent", "request")
-            if intent in ASYNC_INTENTS:
+            if intent in ASYNC_INTENTS or intent == DEAD_LETTER_INTENT:
                 # publicar na fila é síncrono (latência da fila conta);
                 # o consumo além dela não entra no caminho do usuário
                 tails.append(metrics[e["target"]].latency_ms)
@@ -263,29 +313,40 @@ def _advisor_tips(result, node_by_id, out_edges, spec) -> list[AdvisorTip]:
         name = node_by_id[nid].get("data", {}).get("name", nid)
         klass = spec(nid).archetype_class
         if m.cpu > 1.0:
-            tips.append(AdvisorTip(
-                severity="critical", component_refs=[nid],
-                message=f"{name} está a {m.cpu:.0%} da capacidade — aumente réplicas "
-                        f"ou reduza o tráfego que chega até ele.",
-            ))
+            tips.append(
+                AdvisorTip(
+                    severity="critical",
+                    component_refs=[nid],
+                    message=f"{name} está a {m.cpu:.0%} da capacidade — aumente réplicas "
+                    f"ou reduza o tráfego que chega até ele.",
+                )
+            )
         if klass == "database" and m.cpu > 0.9 and not caller_has_cache(nid):
-            tips.append(AdvisorTip(
-                severity="warning", component_refs=[nid],
-                message=f"{name} (SQL) saturado sem cache no caminho — adicione um Cache "
-                        f"com cache_lookup para absorver as leituras.",
-            ))
+            tips.append(
+                AdvisorTip(
+                    severity="warning",
+                    component_refs=[nid],
+                    message=f"{name} (SQL) saturado sem cache no caminho — adicione um Cache "
+                    f"com cache_lookup para absorver as leituras.",
+                )
+            )
         if klass == "llm" and m.rps > 0 and not caller_has_cache(nid):
-            tips.append(AdvisorTip(
-                severity="warning", component_refs=[nid],
-                message=f"{name} recebe chamadas sem Semantic Cache — em fluxos de "
-                        f"pergunta-resposta, um cache semântico corta latência e custo.",
-            ))
+            tips.append(
+                AdvisorTip(
+                    severity="warning",
+                    component_refs=[nid],
+                    message=f"{name} recebe chamadas sem Semantic Cache — em fluxos de "
+                    f"pergunta-resposta, um cache semântico corta latência e custo.",
+                )
+            )
     if result.targets.p99_ms and result.p99_ms > result.targets.p99_ms:
-        tips.append(AdvisorTip(
-            severity="warning",
-            message=f"p99 simulado ({result.p99_ms:.0f} ms) acima do alvo do intake "
-                    f"({result.targets.p99_ms} ms).",
-        ))
+        tips.append(
+            AdvisorTip(
+                severity="warning",
+                message=f"p99 simulado ({result.p99_ms:.0f} ms) acima do alvo configurado "
+                f"({result.targets.p99_ms} ms).",
+            )
+        )
     if not tips:
         tips.append(
             AdvisorTip(severity="ok", message="Dentro dos alvos — nenhum gargalo detectado.")

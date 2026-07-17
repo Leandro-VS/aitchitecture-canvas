@@ -200,7 +200,7 @@ export function AskAI({ diagramId, hasIntake, onNeedContext, shiftLeft }: Props)
           ),
         onDone: () => {
           setStreaming(null);
-          useTutorialSignals.getState().emit("architectReplied");
+          useTutorialSignals.getState().emitArchitectReply(text);
           queryClient.invalidateQueries({ queryKey: ["architect-messages", diagramId] });
         },
       });

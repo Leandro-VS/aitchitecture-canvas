@@ -9,6 +9,7 @@ const DESCRIPTIONS: Record<Intent, string> = {
   retrieval: "busca em índice (search ou vetores/RAG)",
   ai_call: "chamada a modelo ou serviço de IA",
   validation: "checagem: auth, regra de negócio, guardrail",
+  dead_letter: "encaminha somente mensagens que falharam para a DLQ",
 };
 
 /** Aberto ao conectar dois nós: toda edge tem um intent (M2/§5.5). */

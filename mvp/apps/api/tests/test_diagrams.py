@@ -32,29 +32,50 @@ async def test_create_with_title_only(client):
     assert listed[0]["has_intake"] is False
 
 
-async def test_shallow_intake_is_rejected(client):
-    shallow = {**VALID_INTAKE, "summary": "curto demais"}  # < 40 chars (US1)
+async def test_partial_intake_can_be_saved_and_ai_gate_stays_closed(client):
+    shallow = {
+        "summary": "Descrição ainda incompleta",
+        "functional_requirements": [],
+        "considerations": None,
+        "data_classification": "interna",
+    }
     res = await client.post("/api/diagrams", json=payload(intake=shallow))
-    assert res.status_code == 422
+    assert res.status_code == 201, res.text
+    assert res.json()["intake"]["summary"] == "Descrição ainda incompleta"
 
-    no_reqs = {**VALID_INTAKE, "functional_requirements": []}
-    res = await client.post("/api/diagrams", json=payload(intake=no_reqs))
-    assert res.status_code == 422
+    draft = await client.post("/api/exports/draft", json={"diagram_id": res.json()["id"]})
+    assert draft.status_code == 409
+    assert "complete o contexto" in draft.json()["detail"]
 
 
 async def test_patch_canvas_state_changes_hash(client):
     created = (await client.post("/api/diagrams", json=payload())).json()
 
     canvas = {
-        "nodes": [{"id": "n1", "type": "arch", "position": {"x": 0, "y": 0},
-                   "data": {"archetype": "client", "label": "Client (Web)", "name": "Client"}}],
+        "nodes": [
+            {
+                "id": "n1",
+                "type": "arch",
+                "position": {"x": 0, "y": 0},
+                "data": {"archetype": "client", "label": "Client (Web)", "name": "Client"},
+            }
+        ],
         "edges": [],
         "viewport": {"x": 0, "y": 0, "zoom": 1},
+        "simulation_params": {
+            "base_rps": 3500,
+            "traffic_multiplier": 1,
+            "read_ratio": 0.9,
+            "cache_hit_rate": 0.8,
+            "p99_target_ms": 200,
+            "availability_target_pct": None,
+        },
     }
     res = await client.patch(f"/api/diagrams/{created['id']}", json={"canvas_state": canvas})
     assert res.status_code == 200
     body = res.json()
     assert body["canvas_state"]["nodes"][0]["id"] == "n1"
+    assert body["canvas_state"]["simulation_params"]["base_rps"] == 3500
     assert body["canvas_hash"] != created["canvas_hash"]
 
     # intake também compõe o hash (cache dos juízes na Fase 4)
@@ -66,7 +87,8 @@ async def test_patch_canvas_state_changes_hash(client):
 async def test_list_shows_only_own_diagrams(client):
     await client.post("/api/diagrams", json=payload())
     await client.post(
-        "/api/diagrams", json=payload(title="De outra pessoa"),
+        "/api/diagrams",
+        json=payload(title="De outra pessoa"),
         headers={"X-Dev-Email": "outra@local"},
     )
 
@@ -80,9 +102,7 @@ async def test_list_shows_only_own_diagrams(client):
 
 async def test_cannot_access_others_diagram(client):
     created = (await client.post("/api/diagrams", json=payload())).json()
-    res = await client.get(
-        f"/api/diagrams/{created['id']}", headers={"X-Dev-Email": "outra@local"}
-    )
+    res = await client.get(f"/api/diagrams/{created['id']}", headers={"X-Dev-Email": "outra@local"})
     assert res.status_code == 404  # não revela existência
 
 

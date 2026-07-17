@@ -1,15 +1,15 @@
 {
-  "content": "Ótima pergunta — o simulador mostra o banco saturando exatamente porque cada redirecionamento consulta o SQL, e o seu perfil é fortemente read-heavy. O padrão clássico aqui é um cache de leitura na frente do banco: o App Server consulta o cache primeiro (cache_lookup) e só vai ao banco no miss. Com hit rate típico de 80–90% para short-codes quentes, a carga no banco despenca. Preparei a sugestão no canvas — aplique e rode a simulação de novo para ver o ganho no p99 e na CPU do banco.",
+  "content": "O simulador mostra que, depois de escalar a API, o caminho de leitura passou a pressionar o NoSQL. O padrão adequado é um cache de timelines: o App Server consulta o cache primeiro (cache_lookup) e o armazenamento recebe apenas misses e escritas. Com hit rate de 80–90% para timelines recentes, a carga no banco cai e o p99 volta ao alvo. Preparei a sugestão no canvas — aplique e confira a re-simulação.",
   "proposed_diff": {
-    "rationale": "Perfil read-heavy com consulta repetitiva por chave (short-code → URL) é o caso ideal de cache de leitura: absorve a maioria das leituras e tira o banco do caminho crítico.",
+    "rationale": "Perfil read-heavy com consultas repetidas por usuário é adequado para cache de timeline: absorve a maioria das leituras e reduz a carga no armazenamento primário.",
     "citations": [],
     "ops": [
       {
         "op": "add_node",
         "id": "new-cache",
         "archetype": "cache",
-        "name": "Cache de redirecionamentos",
-        "subtitle": "short-code → URL"
+        "name": "Cache de timelines",
+        "subtitle": "timeline recente por usuário"
       },
       {
         "op": "connect",

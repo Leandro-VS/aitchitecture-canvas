@@ -5,14 +5,14 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import CurrentUser
 from ..db import get_session
 from ..db.models import Diagram
-from ..schemas.intake import Intake
+from ..schemas.intake import Intake, IntakeDraft
 
 router = APIRouter(tags=["diagrams"])
 
@@ -25,18 +25,19 @@ class CanvasState(BaseModel):
     nodes: list[dict] = []
     edges: list[dict] = []
     viewport: dict | None = None
+    simulation_params: dict | None = None
 
 
 class CreateDiagram(BaseModel):
     title: str = Field(min_length=3, max_length=200)
-    # opcional: desenhar não exige contexto; quando enviado, é validado
-    # integralmente (raso → 422). Recursos de IA exigem intake completo.
-    intake: Intake | None = None
+    # opcional: desenhar aceita rascunho parcial; recursos de IA exigem o
+    # contrato completo por meio de require_intake.
+    intake: IntakeDraft | None = None
 
 
 class UpdateDiagram(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=200)
-    intake: Intake | None = None
+    intake: IntakeDraft | None = None
     canvas_state: CanvasState | None = None
 
 
@@ -52,7 +53,7 @@ class DiagramSummary(BaseModel):
 class DiagramOut(BaseModel):
     id: uuid.UUID
     title: str
-    intake: Intake | None
+    intake: IntakeDraft | None
     canvas_state: dict
     canvas_hash: str
     status: str
@@ -70,7 +71,15 @@ def require_intake(diagram: Diagram) -> Intake:
             status_code=409,
             detail="preencha o contexto (intake) do diagrama para usar recursos de IA",
         )
-    return Intake.model_validate(diagram.intake)
+    try:
+        return Intake.model_validate(diagram.intake)
+    except ValidationError as exc:
+        missing = sorted({str(error["loc"][0]) for error in exc.errors() if error["loc"]})
+        fields = ", ".join(missing) or "campos obrigatórios"
+        raise HTTPException(
+            status_code=409,
+            detail=f"complete o contexto para usar recursos de IA: {fields}",
+        ) from exc
 
 
 def compute_canvas_hash(canvas_state: dict, intake: dict | None) -> str:

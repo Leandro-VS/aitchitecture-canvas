@@ -25,7 +25,7 @@ import { PropertiesCard } from "../canvas/PropertiesCard";
 import { serializeCanvas, useCanvas, type CanvasNode } from "../canvas/store";
 import { ExportDialog } from "../exports/ExportDialog";
 import { IntakeForm } from "../intake/IntakeForm";
-import { toFormValues, toIntakePayload } from "../intake/schema";
+import { isIntakeComplete, toFormValues, toIntakeDraftPayload } from "../intake/schema";
 import { JudgesRail } from "../judges/JudgesRail";
 import { SimResults } from "../simulation/SimResults";
 import { SimulationBar } from "../simulation/SimulationBar";
@@ -126,9 +126,21 @@ export function Session() {
   useEffect(() => {
     if (!diagram.data) return;
     const cs = diagram.data.canvas_state;
+    let simulationParams = cs.simulation_params;
+    try {
+      const local = window.localStorage.getItem(`blueprint-sim-params:${diagram.data.id}`);
+      if (local) simulationParams = JSON.parse(local);
+    } catch {
+      // Um valor local inválido não impede o carregamento do diagrama remoto.
+    }
     useCanvas
       .getState()
-      .load(diagram.data.id, (cs.nodes as CanvasNode[]) ?? [], (cs.edges as Edge[]) ?? []);
+      .load(
+        diagram.data.id,
+        (cs.nodes as CanvasNode[]) ?? [],
+        (cs.edges as Edge[]) ?? [],
+        simulationParams,
+      );
     setSaveState("saved");
   }, [diagram.data?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -150,6 +162,17 @@ export function Session() {
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer.current);
   }, [rev, id]);
+
+  // Ao navegar antes dos 5 s do debounce, ainda envia o estado mais recente.
+  useEffect(
+    () => () => {
+      const canvas = useCanvas.getState();
+      if (id && canvas.diagramId === id && canvas.rev > 0) {
+        void patchDiagram(id, { canvas_state: serializeCanvas() });
+      }
+    },
+    [id],
+  );
 
   // undo/redo (Ctrl+Z / Ctrl+Shift+Z)
   useEffect(() => {
@@ -180,6 +203,7 @@ export function Session() {
     return <p className="p-8 text-red-400">Diagrama não encontrado.</p>;
 
   const d = diagram.data;
+  const hasCompleteIntake = isIntakeComplete(d.intake);
   const saveLabel: Record<SaveState, string> = {
     saved: "salvo",
     pending: "alterações pendentes…",
@@ -227,13 +251,13 @@ export function Session() {
           <PropertiesCard shiftLeft={judgesOpen} />
           <AskAI
             diagramId={d.id}
-            hasIntake={d.intake !== null}
+            hasIntake={hasCompleteIntake}
             onNeedContext={() => setEditingContext(true)}
             shiftLeft={judgesOpen}
           />
           <JudgesRail
             diagramId={d.id}
-            hasIntake={d.intake !== null}
+            hasIntake={hasCompleteIntake}
             onNeedContext={() => setEditingContext(true)}
             open={judgesOpen}
             onToggle={setJudgesOpen}
@@ -241,7 +265,7 @@ export function Session() {
           {tutorialActive && (
             <TutorialOverlay
               diagramId={d.id}
-              hasIntake={d.intake !== null}
+              hasIntake={hasCompleteIntake}
               onFinish={() => setSearchParams({}, { replace: true })}
             />
           )}
@@ -253,7 +277,7 @@ export function Session() {
       {exporting && (
         <ExportDialog
           diagramId={d.id}
-          hasIntake={d.intake !== null}
+          hasIntake={hasCompleteIntake}
           onClose={() => setExporting(false)}
         />
       )}
@@ -274,7 +298,8 @@ export function Session() {
               defaultValues={toFormValues(d.title, d.intake)}
               submitLabel="Salvar contexto"
               busy={saveContext.isPending}
-              onSubmit={(values) => saveContext.mutate(toIntakePayload(values))}
+              allowPartial
+              onSubmit={(values) => saveContext.mutate(toIntakeDraftPayload(values))}
             />
           </div>
         </div>

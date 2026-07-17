@@ -40,10 +40,10 @@ export interface Archetype {
 }
 
 export interface Intake {
-  summary: string;
-  functional_requirements: string[];
-  considerations: string;
-  data_classification?: "publica" | "interna" | "confidencial" | "restrita";
+  summary?: string | null;
+  functional_requirements?: string[];
+  considerations?: string | null;
+  data_classification?: "publica" | "interna" | "confidencial" | "restrita" | null;
   out_of_scope?: string | null;
   inferred_fields?: string[];
 }
@@ -52,6 +52,7 @@ export interface CanvasStatePayload {
   nodes: unknown[];
   edges: unknown[];
   viewport?: { x: number; y: number; zoom: number } | null;
+  simulation_params?: SimParams | null;
 }
 
 export interface DiagramSummary {
@@ -222,16 +223,27 @@ export interface ExportOut {
   created_at: string;
 }
 
-export const exportDraft = (diagramId: string) =>
+export const exportDraft = (diagramId: string, canvasState: CanvasStatePayload) =>
   api<AdrSections>("/api/exports/draft", {
     method: "POST",
-    body: JSON.stringify({ diagram_id: diagramId }),
+    body: JSON.stringify({ diagram_id: diagramId, canvas_state: canvasState }),
+  });
+
+export const previewExport = (
+  diagramId: string,
+  sections: AdrSections,
+  canvasState: CanvasStatePayload,
+) =>
+  api<{ markdown: string }>("/api/exports/preview", {
+    method: "POST",
+    body: JSON.stringify({ diagram_id: diagramId, sections, canvas_state: canvasState }),
   });
 
 export const createExport = (
   diagramId: string,
   sections: AdrSections,
   pngDataUrl: string | null,
+  canvasState: CanvasStatePayload,
 ) =>
   api<ExportOut>("/api/exports", {
     method: "POST",
@@ -239,6 +251,7 @@ export const createExport = (
       diagram_id: diagramId,
       sections,
       png_data_url: pngDataUrl,
+      canvas_state: canvasState,
     }),
   });
 

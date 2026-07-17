@@ -1,13 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toPng } from "html-to-image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   createExport,
   exportDraft,
+  previewExport,
   type AdrSections,
   type ExportOut,
 } from "../api/client";
+import { serializeCanvas } from "../canvas/store";
 import { useTutorialSignals } from "../tutorial/signals";
 
 const field =
@@ -38,23 +40,35 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
     consequences: "",
   });
   const [result, setResult] = useState<ExportOut | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const emit = useTutorialSignals((s) => s.emit);
 
   // rascunho IA das seções editáveis (exige contexto; sem ele, campos vazios)
   const draft = useQuery({
     queryKey: ["adr-draft", diagramId],
-    queryFn: () => exportDraft(diagramId),
+    queryFn: () => exportDraft(diagramId, serializeCanvas()),
     enabled: hasIntake,
     staleTime: Infinity,
   });
-  const draftApplied = useState(() => ({ done: false }))[0];
-  if (draft.data && !draftApplied.done) {
-    draftApplied.done = true;
-    setSections(draft.data);
-  }
+  const draftApplied = useRef(false);
+  useEffect(() => {
+    if (draft.data && !draftApplied.current) {
+      draftApplied.current = true;
+      setSections(draft.data);
+    }
+  }, [draft.data]);
+
+  const doPreview = useMutation({
+    mutationFn: () => previewExport(diagramId, sections, serializeCanvas()),
+    onSuccess: (out) => {
+      setPreview(out.markdown);
+      emit("exportPreviewed");
+    },
+  });
 
   const doExport = useMutation({
-    mutationFn: async () => createExport(diagramId, sections, await captureCanvasPng()),
+    mutationFn: async () =>
+      createExport(diagramId, sections, await captureCanvasPng(), serializeCanvas()),
     onSuccess: (out) => {
       setResult(out);
       emit("exportDone");
@@ -103,6 +117,37 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
               no mesmo diretório (ex.: no repositório de ADRs).
             </p>
           </div>
+        ) : preview ? (
+          <div className="space-y-4">
+            <p className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-200">
+              Pré-visualização somente: nenhum arquivo foi criado ainda.
+            </p>
+            <pre className="panel-scroll max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-md
+                            border border-white/10 bg-card p-4 font-mono text-xs leading-relaxed
+                            text-ink/80">
+              {preview}
+            </pre>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPreview(null)}
+                className="flex-1 rounded-md border border-white/15 px-4 py-2 text-sm text-ink/80
+                           hover:border-primary/60"
+              >
+                ← Editar seções
+              </button>
+              <button
+                onClick={() => doExport.mutate()}
+                disabled={doExport.isPending}
+                className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white
+                           hover:bg-primary/80 disabled:opacity-50"
+              >
+                {doExport.isPending ? "Gerando…" : "Confirmar e gerar arquivos"}
+              </button>
+            </div>
+            {doExport.isError && (
+              <p className="text-sm text-red-400">{String(doExport.error)}</p>
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
             {hasIntake && draft.isLoading && (
@@ -138,15 +183,15 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
               do Juiz (score + findings com citações).
             </p>
             <button
-              onClick={() => doExport.mutate()}
-              disabled={doExport.isPending}
+              onClick={() => doPreview.mutate()}
+              disabled={doPreview.isPending}
               className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-white
                          hover:bg-primary/80 disabled:opacity-50"
             >
-              {doExport.isPending ? "Gerando…" : "Exportar Markdown + PNG"}
+              {doPreview.isPending ? "Montando prévia…" : "Pré-visualizar pré-ADR"}
             </button>
-            {doExport.isError && (
-              <p className="text-sm text-red-400">{String(doExport.error)}</p>
+            {doPreview.isError && (
+              <p className="text-sm text-red-400">{String(doPreview.error)}</p>
             )}
           </div>
         )}

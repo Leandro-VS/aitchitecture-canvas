@@ -62,10 +62,14 @@ async def _latest_judge(session: AsyncSession, diagram: Diagram) -> dict | None:
 
 
 async def build_adr_context(
-    session: AsyncSession, diagram: Diagram, author: str, sections: AdrSections
+    session: AsyncSession,
+    diagram: Diagram,
+    author: str,
+    sections: AdrSections,
+    canvas_state: dict | None = None,
 ) -> dict:
     serialized = serialize_canvas(
-        diagram.canvas_state,
+        canvas_state or diagram.canvas_state,
         diagram.intake or {},
         await load_last_simulation(session, diagram),
     )
@@ -102,9 +106,11 @@ escolhida e por quê) e consequences (trade-offs e próximos passos).
 Responda APENAS com JSON no schema fornecido."""
 
 
-async def draft_sections(session: AsyncSession, diagram: Diagram) -> AdrSections:
+async def draft_sections(
+    session: AsyncSession, diagram: Diagram, canvas_state: dict | None = None
+) -> AdrSections:
     serialized = serialize_canvas(
-        diagram.canvas_state,
+        canvas_state or diagram.canvas_state,
         diagram.intake or {},
         await load_last_simulation(session, diagram),
     )

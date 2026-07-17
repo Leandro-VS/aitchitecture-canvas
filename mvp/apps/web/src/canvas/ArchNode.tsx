@@ -82,6 +82,11 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
           </span>
         )}
       </div>
+      {sim && sim.error_rate > 0.0001 && (
+        <div className="mt-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-red-400">
+          erro {(sim.error_rate * 100).toFixed(1)}%
+        </div>
+      )}
       {/* 4 pontos de conexão (connectionMode=loose: qualquer um conecta a qualquer um) */}
       <Handle id="left" type="target" position={Position.Left} className="!bg-primary" />
       <Handle id="top" type="target" position={Position.Top} className="!bg-primary" />

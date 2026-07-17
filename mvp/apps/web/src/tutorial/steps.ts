@@ -1,19 +1,29 @@
-/** Roteiro declarativo do tutorial (M14/D14): home timeline do Twitter/X.
- *  Arco pedagógico: caminho quente de leitura primeiro (banco satura → cache
- *  resolve), depois a escrita com fan-out via fila (consistência eventual).
- *  Condições avaliadas contra o store do canvas + sinais dos componentes —
- *  nenhum passo dispara chamada real de LLM (todo o MVP é mock). */
+/** Tutorial progressivo: constrói o caminho mínimo, mede um problema real,
+ * aplica um paliativo e só então introduz os padrões de cache, fila e DLQ. */
 
 export type Condition =
   | { kind: "node_added"; archetype: string }
+  | { kind: "node_replicas"; archetype: string; min: number }
   | { kind: "edge_intent"; intent: string; count: number }
   | { kind: "annotation_added" }
   | { kind: "context_filled" }
   | { kind: "simulation_ran" }
-  | { kind: "architect_replied" }
+  | { kind: "simulation_total_rps"; value: number }
+  | {
+      kind: "simulation_setup";
+      baseRps: number;
+      multiplier: number;
+      readRatio: number;
+      cacheHitRate: number;
+      p99Target: number;
+    }
+  | { kind: "simulation_bottleneck"; archetype: string }
+  | { kind: "simulation_node_active"; archetype: string }
+  | { kind: "simulation_no_errors" }
+  | { kind: "architect_prompt"; prompt: string }
   | { kind: "diff_applied" }
   | { kind: "judge_completed" }
-  | { kind: "export_done" };
+  | { kind: "export_previewed" };
 
 export interface TutorialStep {
   id: string;
@@ -21,147 +31,216 @@ export interface TutorialStep {
   title: string;
   body: string;
   done_when?: Condition[];
-  /** pergunta que o passo pode enviar ao Ask AI com um clique */
   suggested_prompt?: string;
 }
 
-export const SUGGESTED_PROMPT = "Como escalo a escrita de tweets para milhões de seguidores?";
+export const CACHE_PROMPT = "Como reduzo a carga de leitura no banco?";
+export const FANOUT_PROMPT = "Como escalo a escrita de tweets para milhões de seguidores?";
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "intro",
     kind: "info",
-    title: "Feed do Twitter/X",
+    title: "Comece pelo caminho mais simples",
     body:
-      "Vamos desenhar a home timeline e a postagem de tweets.\n\n" +
-      "Requisitos:\n" +
-      "    •  Postar tweets (até 280 caracteres)\n" +
-      "    •  Seguir/deixar de seguir usuários\n" +
-      "    •  Timeline mostra tweets dos seguidos, ordenados por tempo\n" +
-      "    •  300M de usuários ativos por dia\n" +
-      "    •  Timeline carregando em < 200ms",
+      "Vamos construir uma home timeline sem antecipar soluções. Primeiro ela precisa apenas permitir postar tweets e ler, em ordem cronológica, os tweets das pessoas seguidas.\n\n" +
+      "Depois vamos aumentar a carga, observar o que realmente quebra e evoluir o desenho a partir das medições.",
   },
   {
     id: "add-client",
     kind: "action",
-    title: "Adicione um Client",
-    body: "Na palette à esquerda, clique em \"+ Client (Web)\" — são os usuários abrindo a timeline.",
+    title: "Adicione quem faz a requisição",
+    body: "Na palette à esquerda, clique em ‘+ Client (Web)’. Ele representa quem abre a timeline ou publica um tweet.",
     done_when: [{ kind: "node_added", archetype: "client" }],
   },
   {
     id: "add-app",
     kind: "action",
-    title: "Adicione um App Server",
-    body:
-      "Na palette, clique em \"+ App Server\" — é o serviço que monta a home timeline e recebe os posts.\n\n" +
-      "Dica (opcional): depois de adicionar, use o botão ✎ do componente para renomeá-lo para \"Timeline API\". O que conclui o passo é adicionar o componente, não o nome.",
+    title: "Adicione a aplicação",
+    body: "Adicione um App Server. Ele recebe as requisições e monta a resposta da timeline. Você pode renomeá-lo para ‘Timeline API’ pelo botão ✎.",
     done_when: [{ kind: "node_added", archetype: "app-server" }],
   },
   {
     id: "add-db",
     kind: "action",
-    title: "Adicione um NoSQL DB",
-    body: "Tweets e timelines materializadas vivem aqui. NoSQL pela escala: 300M DAU pede sharding horizontal por user_id.",
+    title: "Adicione o armazenamento",
+    body: "Adicione um NoSQL DB para guardar tweets e timelines. Por enquanto ele é apenas o armazenamento do caminho mínimo; ainda não estamos escolhendo sharding ou antecipando gargalos.",
     done_when: [{ kind: "node_added", archetype: "nosql-db" }],
   },
   {
-    id: "connect",
+    id: "connect-base",
     kind: "action",
-    title: "Conecte o caminho de leitura",
-    body: "Arraste do conector direito: Client → Timeline API e Timeline API → NoSQL DB, intent \"request\" nas duas.",
+    title: "Feche o primeiro caminho",
+    body: "Conecte Client → Timeline API e Timeline API → NoSQL DB. Escolha o intent ‘request’ nas duas conexões.",
     done_when: [{ kind: "edge_intent", intent: "request", count: 2 }],
-  },
-  {
-    id: "annotate",
-    kind: "action",
-    title: "Registre uma decisão",
-    body: "Adicione um \"Balão de comentário\", escreva 'timelines shardadas por user_id; consistência eventual aceitável' e arraste do handle do balão até o NoSQL para ancorá-lo. Comentários viram restrições que as IAs respeitam.",
-    done_when: [{ kind: "annotation_added" }],
   },
   {
     id: "context",
     kind: "action",
-    title: "Preencha o contexto",
+    title: "Agora descreva o cenário de crescimento",
     body:
-      "Clique em \"Contexto\" no topo da tela. Sugestões para copiar:\n\n" +
-      "Descrição:\n" +
-      "    Home timeline do Twitter/X: postar tweets e ler a timeline dos seguidos, com 300M de usuários ativos por dia e leitura dominante.\n\n" +
-      "Requisitos (um por linha):\n" +
-      "    •  Postar tweets (até 280 caracteres)\n" +
-      "    •  Seguir/deixar de seguir usuários\n" +
-      "    •  Timeline carregando em < 200ms\n\n" +
-      "Considerações:\n" +
-      "    Leitura >> escrita; fan-out na escrita; consistência eventual aceitável no feed.",
+      "Clique em ‘Contexto’ no topo e registre o problema. Você pode usar:\n\n" +
+      "Descrição:\nHome timeline do Twitter/X para postar tweets e ler os tweets das pessoas seguidas, com crescimento até centenas de milhões de usuários e leitura dominante.\n\n" +
+      "Requisitos (um por linha):\nPostar tweets de até 280 caracteres\nSeguir e deixar de seguir usuários\nCarregar a timeline em menos de 200 ms\n\n" +
+      "Considerações:\nO feed pode aceitar consistência eventual, mas a publicação deve responder rapidamente nos picos.",
     done_when: [{ kind: "context_filled" }],
   },
   {
-    id: "simulate",
+    id: "first-simulation",
     kind: "action",
-    title: "Simule o caminho de leitura",
-    body: "Na barra do topo: abra o ⚙ e suba o RPS base para 2000 (recorte do tráfego real), deixe Reads vs writes em ~90% e clique Start.",
-    done_when: [{ kind: "simulation_ran" }],
+    title: "Aumente a carga e meça",
+    body:
+      "Abra ⚙ na barra de simulação, defina RPS base = 3500, multiplicador = 1,0, cache hit = 80% e p99 alvo = 200 ms. Ajuste Reads vs writes para 90% de leitura e clique Start. Esse é um recorte controlado do tráfego, não os 300M de usuários lançados diretamente no motor.",
+    done_when: [
+      { kind: "simulation_ran" },
+      {
+        kind: "simulation_setup",
+        baseRps: 3500,
+        multiplier: 1,
+        readRatio: 0.9,
+        cacheHitRate: 0.8,
+        p99Target: 200,
+      },
+      { kind: "simulation_total_rps", value: 3500 },
+      { kind: "simulation_bottleneck", archetype: "app-server" },
+    ],
   },
   {
-    id: "bottleneck",
+    id: "app-problem",
     kind: "info",
-    title: "O banco saturou",
-    body: "Ler a timeline direto do armazenamento sobrecarrega o NoSQL: todo refresh vira consulta no banco e o p99 estoura os 200ms. Esse é o hot read path — e banco não escala na velocidade de um cache.",
+    title: "A primeira limitação é a aplicação",
+    body:
+      "Observe o HUD e o nó em vermelho: com uma réplica, a Timeline API recebe 3500 RPS para uma capacidade de 1500. Ela é o maior gargalo desta rodada. O NoSQL também está acima da capacidade e o p99 passa de 200 ms, mas resolver o banco primeiro esconderia a limitação anterior.",
   },
   {
-    id: "add-cache",
+    id: "scale-app",
     kind: "action",
-    title: "Adicione um cache de timelines",
-    body: "Adicione um Cache e conecte Timeline API → Cache com intent \"cache_lookup\". Timelines recentes ficam em memória; o banco só vê os misses. A re-simulação automática mostra o alívio no HUD.",
+    title: "Aplique um paliativo na API",
+    body:
+      "Use o botão + no App Server até chegar a 3 réplicas. Isso é escala horizontal da camada stateless. A simulação roda novamente e mostra onde a pressão foi parar.",
+    done_when: [
+      { kind: "node_replicas", archetype: "app-server", min: 3 },
+      { kind: "simulation_bottleneck", archetype: "nosql-db" },
+    ],
+  },
+  {
+    id: "db-problem",
+    kind: "info",
+    title: "O gargalo se moveu para o banco",
+    body:
+      "Agora a API está abaixo da capacidade, mas o NoSQL recebe as 3500 operações por segundo e suporta 2000. No modelo atual, o p99 fica em torno de 205 ms — pouco acima do alvo — e o nó mostra erros de saturação. A medição, e não uma suposição, revelou o próximo problema.",
+  },
+  {
+    id: "ask-cache",
+    kind: "action",
+    title: "Peça uma solução para o caminho de leitura",
+    body: "Envie a pergunta sugerida. O Arquiteto recebe o contexto, o canvas e a última simulação, por isso consegue propor uma mudança ligada ao gargalo observado.",
+    suggested_prompt: CACHE_PROMPT,
+    done_when: [{ kind: "architect_prompt", prompt: CACHE_PROMPT }],
+  },
+  {
+    id: "apply-cache",
+    kind: "action",
+    title: "Aplique o cache sugerido",
+    body: "A sugestão aparece tracejada no canvas. Clique em Apply no card do Ask AI para adicionar o Cache ligado por ‘cache_lookup’.",
     done_when: [
       { kind: "node_added", archetype: "cache" },
       { kind: "edge_intent", intent: "cache_lookup", count: 1 },
     ],
   },
   {
-    id: "read-solved",
-    kind: "info",
-    title: "Leitura resolvida — e a escrita?",
-    body: "Com hit alto no cache, o banco respira e o p99 volta ao alvo. Mas ainda há um problema escondido: quando alguém com milhões de seguidores posta, atualizar TODAS as timelines na hora do post (de forma síncrona) derrubaria o sistema.",
-  },
-  {
-    id: "ask",
+    id: "validate-cache",
     kind: "action",
-    title: "Pergunte ao Arquiteto",
-    body: "Use o botão abaixo para enviar a pergunta sugerida ao Ask AI — ele vê seu canvas, o contexto e a última simulação.",
-    suggested_prompt: SUGGESTED_PROMPT,
-    done_when: [{ kind: "architect_replied" }],
+    title: "Valide a solução na simulação",
+    body:
+      "Com 80% de cache hit, leituras atingem o cache e somente misses mais escritas chegam ao NoSQL. Aguarde a re-simulação automática: os componentes devem ficar sem erros e o p99 abaixo de 200 ms.",
+    done_when: [{ kind: "simulation_no_errors" }],
   },
   {
-    id: "apply",
-    kind: "action",
-    title: "Aplique o fan-out on write",
-    body: "O Arquiteto propôs fila + worker como nós tracejados (sugestão). Clique em Apply no card do chat: o post publica na fila e retorna; o worker materializa as timelines de forma assíncrona.",
-    done_when: [{ kind: "diff_applied" }],
-  },
-  {
-    id: "fanout",
+    id: "write-problem",
     kind: "info",
-    title: "Fan-out on write",
-    body: "Note no HUD: o caminho síncrono do usuário agora termina na fila (baratíssimo). O custo é consistência eventual — a timeline dos seguidores converge em segundos, aceitável para feed. É o mesmo trade-off do Twitter real.",
+    title: "A leitura melhorou; falta modelar a escrita",
+    body:
+      "O cache resolveu a repetição de leituras, mas um tweet de uma conta com milhões de seguidores não pode atualizar todas as timelines dentro da requisição. Fazer esse fan-out de modo síncrono ligaria a latência do usuário ao número de seguidores.",
+  },
+  {
+    id: "ask-fanout",
+    kind: "action",
+    title: "Peça uma solução para o fan-out",
+    body: "Envie a segunda pergunta sugerida para tirar o trabalho pesado do caminho síncrono.",
+    suggested_prompt: FANOUT_PROMPT,
+    done_when: [{ kind: "architect_prompt", prompt: FANOUT_PROMPT }],
+  },
+  {
+    id: "apply-fanout",
+    kind: "action",
+    title: "Aplique fila e worker",
+    body:
+      "Clique em Apply. A Timeline API publica somente os 10% de escritas na fila; o worker consome e materializa as timelines no NoSQL. Leituras não são duplicadas no caminho de escrita.",
+    done_when: [
+      { kind: "node_added", archetype: "message-queue" },
+      { kind: "node_added", archetype: "worker" },
+      { kind: "edge_intent", intent: "async_message", count: 2 },
+    ],
+  },
+  {
+    id: "fanout-result",
+    kind: "info",
+    title: "O trabalho pesado saiu da requisição",
+    body:
+      "No cenário de 3500 RPS e 90% de leitura, a fila e o worker principal recebem cerca de 350 operações por segundo, não 3500. O caminho síncrono termina na publicação da fila; a contrapartida é consistência eventual no feed.",
+  },
+  {
+    id: "add-dlq",
+    kind: "action",
+    title: "Separe as falhas do fluxo principal",
+    body: "Adicione ‘Dead Letter Queue’ em Messaging e ‘DLQ Worker’ em Compute. Eles existem para mensagens que falharam após tentativas, não para repetir a escala da fila principal.",
+    done_when: [
+      { kind: "node_added", archetype: "dead-letter-queue" },
+      { kind: "node_added", archetype: "dlq-worker" },
+    ],
+  },
+  {
+    id: "connect-dlq",
+    kind: "action",
+    title: "Conecte somente o caminho de falha",
+    body:
+      "Conecte Fan-out worker → Dead Letter Queue com intent ‘dead_letter’. Depois conecte Dead Letter Queue → DLQ Worker com ‘async_message’. A re-simulação deve mostrar cerca de 1% do volume principal nesse ramo.",
+    done_when: [
+      { kind: "edge_intent", intent: "dead_letter", count: 1 },
+      { kind: "edge_intent", intent: "async_message", count: 3 },
+      { kind: "simulation_node_active", archetype: "dead-letter-queue" },
+      { kind: "simulation_no_errors" },
+    ],
+  },
+  {
+    id: "annotate",
+    kind: "action",
+    title: "Registre os trade-offs",
+    body:
+      "Adicione um Balão de comentário e registre algo como: ‘cache exige política de invalidação; fan-out é eventual; DLQ recebe apenas falhas’. Use qualquer uma das quatro arestas do balão para ancorá-lo a um componente.",
+    done_when: [{ kind: "annotation_added" }],
   },
   {
     id: "judge",
     kind: "action",
     title: "Rode o Juiz",
-    body: "Abra a aba \"AI Judge\" (borda direita) e clique em \"Rodar Juiz\". Ele avalia contra os guidelines (cache em read-heavy, fan-out por filas…) citando doc + seção. Explore: clique num finding para destacar os nós, vote 👍/👎 e resolva.",
+    body: "Abra ‘AI Judge’ na borda direita e clique em ‘Rodar Juiz’. Os findings devem refletir o desenho final, a simulação e as regras do corpus.",
     done_when: [{ kind: "judge_completed" }],
   },
   {
     id: "export",
     kind: "action",
-    title: "Exporte o pré-ADR",
-    body: "Clique em \"Exportar\" no topo, revise as seções editáveis e gere o Markdown com a imagem do diagrama — pronto para a discussão de arquitetura.",
-    done_when: [{ kind: "export_done" }],
+    title: "Confira antes de gerar",
+    body:
+      "Clique em ‘Exportar’, revise as seções e escolha ‘Pré-visualizar pré-ADR’. A prévia não cria arquivo nem registro; a geração só acontece depois de uma confirmação explícita.",
+    done_when: [{ kind: "export_previewed" }],
   },
   {
     id: "done",
     kind: "info",
-    title: "Pronto! 🎉",
-    body: "Você desenhou o feed com hot read path + cache e fan-out on write via fila — passando por canvas, comentários, contexto, simulação, Ask AI, Juiz e export. Este diagrama é seu: continue evoluindo (sharding explícito? réplicas?) ou crie um novo.",
+    title: "Diagrama concluído",
+    body:
+      "Você começou com o caminho mínimo, mediu dois gargalos na ordem em que apareceram, aplicou um paliativo, consultou a IA e validou cache, processamento assíncrono e DLQ com cargas coerentes. Sharding, réplicas do armazenamento e estratégias híbridas de fan-out são próximos experimentos — agora motivados por dados.",
   },
 ];

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useCanvas } from "../canvas/store";
 import { useTutorialSignals } from "../tutorial/signals";
@@ -24,12 +24,53 @@ function Metric({ label, value, target, bad }: {
 /** HUD flutuante com o resultado da última simulação (parte inferior do canvas). */
 export function SimResults() {
   const sim = useCanvas((s) => s.sim);
+  const diagramId = useCanvas((s) => s.diagramId);
   const nodes = useCanvas((s) => s.nodes);
   const selectNodes = useCanvas((s) => s.selectNodes);
   const [collapsed, setCollapsed] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   // com o dock do tutorial aberto, o HUD sobe para não ficar escondido
   const tutorialActive = useTutorialSignals((s) => s.active);
-  const bottom = tutorialActive ? "bottom-32" : "bottom-3";
+  const baseBottom = tutorialActive ? 128 : 12;
+
+  useEffect(() => {
+    if (!diagramId) return;
+    try {
+      const saved = window.localStorage.getItem(`blueprint-sim-hud:${diagramId}`);
+      setOffset(saved ? JSON.parse(saved) : { x: 0, y: 0 });
+    } catch {
+      setOffset({ x: 0, y: 0 });
+    }
+  }, [diagramId]);
+
+  useEffect(() => {
+    if (diagramId) {
+      window.localStorage.setItem(`blueprint-sim-hud:${diagramId}`, JSON.stringify(offset));
+    }
+  }, [diagramId, offset]);
+
+  const startDrag = (event: React.PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const start = { x: event.clientX, y: event.clientY, offset };
+    const move = (pointer: PointerEvent) =>
+      setOffset({
+        x: start.offset.x + pointer.clientX - start.x,
+        y: start.offset.y + pointer.clientY - start.y,
+      });
+    const finish = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish, { once: true });
+  };
+
+  const position = {
+    left: `calc(50% + ${offset.x}px)`,
+    bottom: `${baseBottom - offset.y}px`,
+    transform: "translateX(-50%)",
+  };
 
   if (!sim) return null;
   const targets = sim.targets;
@@ -38,22 +79,38 @@ export function SimResults() {
 
   if (collapsed) {
     return (
-      <button
-        onClick={() => setCollapsed(false)}
-        className={`absolute ${bottom} left-1/2 z-20 -translate-x-1/2 rounded-full border
-                   border-white/10 bg-panel/95 px-4 py-1.5 font-mono text-[10px] text-ink/70
-                   shadow-xl hover:text-ink`}
+      <div
+        style={position}
+        className="absolute z-20 flex items-center rounded-full border border-white/10
+                   bg-panel/95 px-2 py-1.5 font-mono text-[10px] text-ink/70 shadow-xl"
       >
-        p99 {Math.round(sim.p99_ms)} ms · erro {(sim.error_rate * 100).toFixed(1)}% ▴
-      </button>
+        <span
+          onPointerDown={startDrag}
+          onDoubleClick={() => setOffset({ x: 0, y: 0 })}
+          className="cursor-move px-1 text-ink/35"
+          title="arraste o HUD; duplo clique restaura"
+        >
+          ⠿
+        </span>
+        <button onClick={() => setCollapsed(false)} className="px-2 hover:text-ink">
+          p99 {Math.round(sim.p99_ms)} ms · erro {(sim.error_rate * 100).toFixed(1)}% ▴
+        </button>
+      </div>
     );
   }
 
   return (
-    <div className={`absolute ${bottom} left-1/2 z-20 w-[600px] max-w-[calc(100%-8rem)]
-                    -translate-x-1/2 select-none rounded-xl border border-white/10
-                    bg-panel p-3 shadow-xl`}>
+    <div style={position} className="absolute z-20 w-[600px] max-w-[calc(100%-8rem)]
+                    select-none rounded-xl border border-white/10 bg-panel p-3 shadow-xl">
       <div className="flex items-center divide-x divide-white/10">
+        <span
+          onPointerDown={startDrag}
+          onDoubleClick={() => setOffset({ x: 0, y: 0 })}
+          className="cursor-move pr-2 text-ink/30"
+          title="arraste o HUD; duplo clique restaura"
+        >
+          ⠿
+        </span>
         <Metric label="RPS total" value={String(Math.round(sim.total_rps))} />
         <Metric
           label="p99"

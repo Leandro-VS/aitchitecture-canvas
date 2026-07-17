@@ -34,6 +34,7 @@ async def _owned_diagram(
 
 class DraftRequest(BaseModel):
     diagram_id: uuid.UUID
+    canvas_state: dict | None = None
 
 
 @router.post("/api/exports/draft")
@@ -45,12 +46,41 @@ async def export_draft(
     """Rascunho IA das seções editáveis (contexto/decisão/consequências)."""
     diagram = await _owned_diagram(session, user.id, body.diagram_id)
     require_intake(diagram)  # rascunho é recurso de IA
-    return await draft_sections(session, diagram)
+    return await draft_sections(session, diagram, body.canvas_state)
+
+
+class PreviewRequest(BaseModel):
+    diagram_id: uuid.UUID
+    sections: AdrSections = Field(default_factory=AdrSections)
+    canvas_state: dict | None = None
+
+
+class PreviewOut(BaseModel):
+    markdown: str
+
+
+@router.post("/api/exports/preview")
+async def preview_export(
+    body: PreviewRequest,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PreviewOut:
+    """Renderiza a versão final sem criar registro nem gravar no object store."""
+    diagram = await _owned_diagram(session, user.id, body.diagram_id)
+    context = await build_adr_context(
+        session,
+        diagram,
+        user.name or user.email,
+        body.sections,
+        body.canvas_state,
+    )
+    return PreviewOut(markdown=render_adr(context))
 
 
 class ExportRequest(BaseModel):
     diagram_id: uuid.UUID
-    sections: AdrSections = AdrSections()
+    sections: AdrSections = Field(default_factory=AdrSections)
+    canvas_state: dict | None = None
     # PNG do canvas capturado pelo front (html-to-image); opcional
     png_data_url: str | None = Field(default=None, max_length=8_000_000)
 
@@ -72,7 +102,13 @@ async def create_export(
     """Render Jinja2 → MD (+PNG) no MinIO/S3 com URL assinada. Sem IA aqui —
     exportar funciona mesmo sem intake (seções ficam 'a preencher')."""
     diagram = await _owned_diagram(session, user.id, body.diagram_id)
-    context = await build_adr_context(session, diagram, user.name or user.email, body.sections)
+    context = await build_adr_context(
+        session,
+        diagram,
+        user.name or user.email,
+        body.sections,
+        body.canvas_state,
+    )
     md = render_adr(context)
 
     slug = dt.datetime.now(dt.UTC).strftime("%Y%m%d-%H%M%S")
@@ -111,9 +147,7 @@ async def list_exports(
     await _owned_diagram(session, user.id, diagram_id)
     rows = (
         await session.scalars(
-            select(Export)
-            .where(Export.diagram_id == diagram_id)
-            .order_by(Export.created_at.desc())
+            select(Export).where(Export.diagram_id == diagram_id).order_by(Export.created_at.desc())
         )
     ).all()
     return [

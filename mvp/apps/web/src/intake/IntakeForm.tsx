@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 
 import {
   DEFAULT_FORM_VALUES,
+  intakeDraftFormSchema,
   intakeFormSchema,
   type IntakeFormValues,
 } from "./schema";
@@ -18,17 +19,23 @@ interface Props {
   submitLabel: string;
   onSubmit: (values: IntakeFormValues) => void;
   busy?: boolean;
+  allowPartial?: boolean;
 }
 
-export function IntakeForm({ defaultValues, submitLabel, onSubmit, busy }: Props) {
+export function IntakeForm({ defaultValues, submitLabel, onSubmit, busy, allowPartial }: Props) {
   const form = useForm<IntakeFormValues>({
-    resolver: zodResolver(intakeFormSchema),
+    resolver: zodResolver(allowPartial ? intakeDraftFormSchema : intakeFormSchema),
     defaultValues: { ...DEFAULT_FORM_VALUES, ...defaultValues },
   });
   const errors = form.formState.errors;
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      {allowPartial && (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-ink/60">
+          Você pode salvar um rascunho incompleto. Os campos obrigatórios só serão cobrados ao usar a IA.
+        </p>
+      )}
       <div>
         <label className={label} htmlFor="title">Título</label>
         <input id="title" className={field} placeholder="ex.: Assistente RAG de atendimento"

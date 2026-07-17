@@ -14,11 +14,15 @@
 {% if intake %}
 ## Requisitos
 
+{% if intake.functional_requirements %}
 {% for req in intake.functional_requirements %}- {{ req }}
 {% endfor %}
-**Considerações e restrições:** {{ intake.considerations }}
+{% else %}
+- _a preencher_
+{% endif %}
+**Considerações e restrições:** {{ intake.considerations or "_a preencher_" }}
 
-**Classificação de dados predominante:** {{ intake.data_classification }}
+**Classificação de dados predominante:** {{ intake.data_classification or "_a preencher_" }}
 {% if intake.out_of_scope %}
 **Fora de escopo:** {{ intake.out_of_scope }}
 {% endif %}

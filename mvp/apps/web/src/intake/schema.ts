@@ -22,6 +22,17 @@ export const intakeFormSchema = z.object({
   out_of_scope: z.string().optional(),
 });
 
+/** O rascunho é persistível a qualquer momento. A validação completa continua
+ *  sendo aplicada somente antes de chamar os recursos de IA. */
+export const intakeDraftFormSchema = z.object({
+  title: z.string().min(3, "mínimo 3 caracteres").max(200),
+  summary: z.string(),
+  requirements: z.string(),
+  considerations: z.string(),
+  data_classification: z.enum(["publica", "interna", "confidencial", "restrita"]),
+  out_of_scope: z.string().optional(),
+});
+
 export type IntakeFormValues = z.infer<typeof intakeFormSchema>;
 
 export function toIntakePayload(v: IntakeFormValues): { title: string; intake: Intake } {
@@ -40,6 +51,33 @@ export function toIntakePayload(v: IntakeFormValues): { title: string; intake: I
   };
 }
 
+export function toIntakeDraftPayload(v: IntakeFormValues): { title: string; intake: Intake } {
+  return {
+    title: v.title,
+    intake: {
+      summary: v.summary.trim() || null,
+      functional_requirements: v.requirements
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+      considerations: v.considerations.trim() || null,
+      data_classification: v.data_classification,
+      out_of_scope: v.out_of_scope?.trim() || null,
+    },
+  };
+}
+
+export function isIntakeComplete(intake: Intake | null): boolean {
+  return Boolean(
+    intake?.summary &&
+      intake.summary.length >= 40 &&
+      intake.considerations &&
+      intake.considerations.length >= 20 &&
+      intake.functional_requirements?.some((requirement) => requirement.trim().length >= 5) &&
+      intake.data_classification,
+  );
+}
+
 export function toFormValues(
   title: string,
   intake: Intake | null,
@@ -47,9 +85,9 @@ export function toFormValues(
   if (!intake) return { ...DEFAULT_FORM_VALUES, title };
   return {
     title,
-    summary: intake.summary,
-    requirements: intake.functional_requirements.join("\n"),
-    considerations: intake.considerations,
+    summary: intake.summary ?? "",
+    requirements: (intake.functional_requirements ?? []).join("\n"),
+    considerations: intake.considerations ?? "",
     data_classification: intake.data_classification ?? "interna",
     out_of_scope: intake.out_of_scope ?? "",
   };

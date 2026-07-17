@@ -10,6 +10,21 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class IntakeDraft(BaseModel):
+    """Rascunho persistível do contexto.
+
+    O usuário pode salvar qualquer subconjunto de campos. Somente recursos de
+    IA convertem o rascunho para ``Intake`` e exigem o contrato completo.
+    """
+
+    summary: str | None = None
+    functional_requirements: list[str] = []
+    considerations: str | None = None
+    data_classification: Literal["publica", "interna", "confidencial", "restrita"] | None = None
+    out_of_scope: str | None = None
+    inferred_fields: list[str] = []
+
+
 class Intake(BaseModel):
     summary: str = Field(min_length=40)
     functional_requirements: list[str] = Field(min_length=1)

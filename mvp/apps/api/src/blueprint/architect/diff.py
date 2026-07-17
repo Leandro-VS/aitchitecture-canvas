@@ -20,7 +20,13 @@ from ..judges.schemas import Citation
 # retrieval=busca em índice (search ou RAG) · ai_call=chamada a modelo/serviço
 # de IA · validation=checagem (auth, regra de negócio, guardrail)
 Intent = Literal[
-    "request", "cache_lookup", "async_message", "retrieval", "ai_call", "validation"
+    "request",
+    "cache_lookup",
+    "async_message",
+    "dead_letter",
+    "retrieval",
+    "ai_call",
+    "validation",
 ]
 
 MAX_SKETCH_NODES = 25

@@ -28,7 +28,11 @@ export function AnnotationNode({ id, data, selected }: NodeProps<Node<Annotation
       <p className="whitespace-pre-wrap font-mono text-xs leading-snug text-amber-100/90">
         {data.text || "vazio — clique no ✎ para escrever"}
       </p>
-      <Handle type="source" position={Position.Right} className="!bg-amber-400" />
+      {/* connectionMode=loose: os quatro lados podem ancorar o comentário. */}
+      <Handle id="left" type="source" position={Position.Left} className="!bg-amber-400" />
+      <Handle id="top" type="source" position={Position.Top} className="!bg-amber-400" />
+      <Handle id="right" type="source" position={Position.Right} className="!bg-amber-400" />
+      <Handle id="bottom" type="source" position={Position.Bottom} className="!bg-amber-400" />
     </div>
   );
 }

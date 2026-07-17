@@ -10,6 +10,7 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
   const nodes = useCanvas((s) => s.nodes);
   const edges = useCanvas((s) => s.edges);
   const sim = useCanvas((s) => s.sim);
+  const simParams = useCanvas((s) => s.simParams);
   const signals = useTutorialSignals();
 
   if (!conditions) return true;
@@ -18,6 +19,14 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
       case "node_added":
         return nodes.some(
           (n) => n.type === "arch" && !n.data.ghost && n.data.archetype === c.archetype,
+        );
+      case "node_replicas":
+        return nodes.some(
+          (n) =>
+            n.type === "arch" &&
+            !n.data.ghost &&
+            n.data.archetype === c.archetype &&
+            (n.data.replicas ?? 1) >= c.min,
         );
       case "edge_intent":
         return (
@@ -31,14 +40,36 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
         return hasIntake;
       case "simulation_ran":
         return sim !== null;
-      case "architect_replied":
-        return signals.architectReplied;
+      case "simulation_total_rps":
+        return sim?.total_rps === c.value;
+      case "simulation_setup":
+        return (
+          simParams.base_rps === c.baseRps &&
+          simParams.traffic_multiplier === c.multiplier &&
+          Math.abs(simParams.read_ratio - c.readRatio) < 0.001 &&
+          Math.abs(simParams.cache_hit_rate - c.cacheHitRate) < 0.001 &&
+          simParams.p99_target_ms === c.p99Target
+        );
+      case "simulation_bottleneck": {
+        const bottleneck = nodes.find((node) => node.id === sim?.bottleneck);
+        return bottleneck?.type === "arch" && bottleneck.data.archetype === c.archetype;
+      }
+      case "simulation_node_active": {
+        const match = nodes.find(
+          (node) => node.type === "arch" && node.data.archetype === c.archetype,
+        );
+        return Boolean(match && (sim?.nodes[match.id]?.rps ?? 0) > 0);
+      }
+      case "simulation_no_errors":
+        return sim !== null && sim.error_rate <= 0.001;
+      case "architect_prompt":
+        return signals.lastArchitectPrompt === c.prompt;
       case "diff_applied":
         return signals.diffApplied;
       case "judge_completed":
         return signals.judgeCompleted;
-      case "export_done":
-        return signals.exportDone;
+      case "export_previewed":
+        return signals.exportPreviewed;
     }
   });
 }

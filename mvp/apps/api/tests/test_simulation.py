@@ -1,7 +1,7 @@
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from blueprint.catalog import CATALOG
+from blueprint.catalog import CATALOG, CATEGORY_ORDER
 from blueprint.simulation import SimParams, simulate
 from blueprint.simulation.engine import ArchetypeSpec
 
@@ -18,8 +18,12 @@ SPECS = {
 
 
 def node(nid: str, archetype: str, **data) -> dict:
-    return {"id": nid, "type": "arch", "position": {"x": 0, "y": 0},
-            "data": {"archetype": archetype, "name": nid, **data}}
+    return {
+        "id": nid,
+        "type": "arch",
+        "position": {"x": 0, "y": 0},
+        "data": {"archetype": archetype, "name": nid, **data},
+    }
 
 
 def edge(src: str, tgt: str, intent: str = "request") -> dict:
@@ -34,6 +38,26 @@ URL_SHORTENER = canvas(
     [node("client", "client"), node("app", "app-server"), node("db", "sql-db")],
     [edge("client", "app"), edge("app", "db")],
 )
+
+
+def test_catalog_keeps_ai_last_and_contains_medium_scale_components():
+    categories = list(dict.fromkeys(item["category"] for item in CATALOG))
+    archetypes = {item["archetype"] for item in CATALOG}
+
+    assert categories == CATEGORY_ORDER
+    assert categories[-1] == "AI & Agents"
+    assert {
+        "model-router",
+        "model-endpoint-realtime",
+        "model-endpoint-batch",
+        "rag-retriever",
+        "tool-registry",
+        "agent-memory",
+        "prompt-store",
+        "mcp-gateway",
+        "llm-observability",
+    } <= archetypes
+    assert {"dead-letter-queue", "dlq-worker"} <= archetypes
 
 
 def test_deterministic():
@@ -57,8 +81,12 @@ def test_bottleneck_is_the_database():
 
 def test_cache_absorbs_reads():
     with_cache = canvas(
-        [node("client", "client"), node("app", "app-server"),
-         node("cache", "cache"), node("db", "sql-db")],
+        [
+            node("client", "client"),
+            node("app", "app-server"),
+            node("cache", "cache"),
+            node("db", "sql-db"),
+        ],
         [edge("client", "app"), edge("app", "cache", "cache_lookup"), edge("app", "db")],
     )
     params = SimParams(base_rps=200, traffic_multiplier=3, read_ratio=0.9, cache_hit_rate=0.9)
@@ -83,10 +111,17 @@ def test_replicas_increase_capacity():
 
 def test_async_path_does_not_enter_p99():
     with_worker = canvas(
-        [node("client", "client"), node("app", "app-server"),
-         node("q", "message-queue"), node("wk", "worker")],
-        [edge("client", "app"), edge("app", "q", "async_enqueue"),
-         edge("q", "wk", "async_enqueue")],
+        [
+            node("client", "client"),
+            node("app", "app-server"),
+            node("q", "message-queue"),
+            node("wk", "worker"),
+        ],
+        [
+            edge("client", "app"),
+            edge("app", "q", "async_enqueue"),
+            edge("q", "wk", "async_enqueue"),
+        ],
     )
     result = simulate(with_worker, SimParams(), SPECS)
     # caminho síncrono: client(0) + app(25) + fila(8); worker (25ms) fora do p99
@@ -94,11 +129,90 @@ def test_async_path_does_not_enter_p99():
     assert result.nodes["wk"].rps == 100  # mas o tráfego chega nele
 
 
+def test_tutorial_bottlenecks_follow_the_progressive_story():
+    base = canvas(
+        [node("client", "client"), node("app", "app-server"), node("db", "nosql-db")],
+        [edge("client", "app"), edge("app", "db")],
+    )
+    params = SimParams(
+        base_rps=3500,
+        read_ratio=0.9,
+        cache_hit_rate=0.8,
+        p99_target_ms=200,
+    )
+
+    initial = simulate(base, params, SPECS)
+    assert initial.bottleneck == "app"
+    assert initial.nodes["app"].cpu == round(3500 / 1500, 4)
+    assert initial.p99_ms > 200
+
+    base["nodes"][1]["data"]["replicas"] = 3
+    scaled = simulate(base, params, SPECS)
+    assert scaled.bottleneck == "db"
+    assert scaled.nodes["app"].health == "ok"
+    assert scaled.nodes["db"].health == "critical"
+    assert scaled.p99_ms == 205
+
+    base["nodes"].append(node("cache", "cache"))
+    base["edges"].append(edge("app", "cache", "cache_lookup"))
+    cached = simulate(base, params, SPECS)
+    assert cached.nodes["db"].rps == 980
+    assert cached.nodes["db"].health == "ok"
+    assert cached.error_rate == 0
+    assert cached.p99_ms < 200
+
+
+def test_async_writes_and_dlq_receive_only_their_traffic_share():
+    feed = canvas(
+        [
+            node("client", "client"),
+            node("app", "app-server", replicas=3),
+            node("cache", "cache"),
+            node("db", "nosql-db"),
+            node("queue", "message-queue"),
+            node("worker", "worker"),
+            node("dlq", "dead-letter-queue"),
+            node("dlq-worker", "dlq-worker"),
+        ],
+        [
+            edge("client", "app"),
+            edge("app", "cache", "cache_lookup"),
+            edge("app", "db"),
+            edge("app", "queue", "async_message"),
+            edge("queue", "worker", "async_message"),
+            edge("worker", "db"),
+            edge("worker", "dlq", "dead_letter"),
+            edge("dlq", "dlq-worker", "async_message"),
+        ],
+    )
+    result = simulate(
+        feed,
+        SimParams(base_rps=3500, read_ratio=0.9, cache_hit_rate=0.8),
+        SPECS,
+    )
+
+    assert result.nodes["cache"].rps == 3150
+    assert result.nodes["queue"].rps == 350
+    assert result.nodes["worker"].rps == 350
+    assert result.nodes["db"].rps == 976.5  # 630 misses + 99% das 350 escritas
+    assert result.nodes["dlq"].rps == 3.5
+    assert result.nodes["dlq-worker"].rps == 3.5
+    assert result.error_rate == 0
+
+
 def test_annotations_and_cycles_are_safe():
     weird = canvas(
-        [node("client", "client"), node("a", "app-server"), node("b", "app-server"),
-         {"id": "note", "type": "annotation", "position": {"x": 0, "y": 0},
-          "data": {"text": "comentário"}}],
+        [
+            node("client", "client"),
+            node("a", "app-server"),
+            node("b", "app-server"),
+            {
+                "id": "note",
+                "type": "annotation",
+                "position": {"x": 0, "y": 0},
+                "data": {"text": "comentário"},
+            },
+        ],
         [edge("client", "a"), edge("a", "b"), edge("b", "a")],  # ciclo a<->b
     )
     result = simulate(weird, SimParams(), SPECS)
@@ -134,10 +248,21 @@ def random_canvas(draw):
         s = draw(st.integers(min_value=0, max_value=n - 1))
         t = draw(st.integers(min_value=0, max_value=n - 1))
         if s != t:
-            intent = draw(st.sampled_from(
-                ["request", "cache_lookup", "async_enqueue", "llm_call", "retrieval"]))
-            edges.append({"id": f"e{j}", "source": f"n{s}", "target": f"n{t}",
-                          "data": {"intent": intent}})
+            intent = draw(
+                st.sampled_from(
+                    [
+                        "request",
+                        "cache_lookup",
+                        "async_enqueue",
+                        "dead_letter",
+                        "llm_call",
+                        "retrieval",
+                    ]
+                )
+            )
+            edges.append(
+                {"id": f"e{j}", "source": f"n{s}", "target": f"n{t}", "data": {"intent": intent}}
+            )
     return canvas(nodes, edges)
 
 

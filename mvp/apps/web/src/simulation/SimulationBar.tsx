@@ -21,26 +21,15 @@ const popField =
  *  Playground). Parâmetros extras (RPS base, cache hit, alvos) ficam no ⚙. */
 export function SimulationBar({ diagramId }: { diagramId: string }) {
   const setSim = useCanvas((s) => s.setSim);
-  const [baseRps, setBaseRps] = useState(100);
-  const [multiplier, setMultiplier] = useState(1);
-  const [readRatio, setReadRatio] = useState(0.8);
-  const [cacheHit, setCacheHit] = useState(0.8);
-  const [p99Target, setP99Target] = useState("");
-  const [availTarget, setAvailTarget] = useState("");
+  const params = useCanvas((s) => s.simParams);
+  const setParams = useCanvas((s) => s.setSimParams);
   const [gearOpen, setGearOpen] = useState(false);
 
   const run = useMutation({
     mutationFn: () =>
       runSimulation(
         diagramId,
-        {
-          base_rps: baseRps,
-          traffic_multiplier: multiplier,
-          read_ratio: readRatio,
-          cache_hit_rate: cacheHit,
-          p99_target_ms: p99Target ? Number(p99Target) : null,
-          availability_target_pct: availTarget ? Number(availTarget) : null,
-        },
+        params,
         serializeCanvas(), // o que está na tela, não o que o autosave persistiu
       ),
     onSuccess: (result: SimResult) => setSim(result),
@@ -73,11 +62,11 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
           <div className="flex items-baseline justify-between gap-2 whitespace-nowrap">
             <span className={tinyLabel}>Traffic</span>
             <span className="font-mono text-[10px] text-ink/70">
-              ×{multiplier.toFixed(1)} · {Math.round(baseRps * multiplier)} rps
+              ×{params.traffic_multiplier.toFixed(1)} · {Math.round(params.base_rps * params.traffic_multiplier)} rps
             </span>
           </div>
-          <input type="range" min={0.5} max={10} step={0.5} value={multiplier}
-            onChange={(e) => setMultiplier(Number(e.target.value))}
+          <input type="range" min={0.5} max={10} step={0.5} value={params.traffic_multiplier}
+            onChange={(e) => setParams({ traffic_multiplier: Number(e.target.value) })}
             className="w-full accent-[#E8622C]" />
         </div>
 
@@ -85,11 +74,11 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
           <div className="flex items-baseline justify-between">
             <span className={tinyLabel}>Reads vs writes</span>
           </div>
-          <input type="range" min={0} max={1} step={0.01} value={readRatio}
-            onChange={(e) => setReadRatio(Number(e.target.value))}
+          <input type="range" min={0} max={1} step={0.01} value={params.read_ratio}
+            onChange={(e) => setParams({ read_ratio: Number(e.target.value) })}
             className="w-full accent-[#E8622C]" />
           <div className="font-mono text-[9px] leading-none text-ink/45">
-            {readLabel(readRatio)}
+            {readLabel(params.read_ratio)}
           </div>
         </div>
 
@@ -108,26 +97,28 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
                             border border-white/10 bg-panel p-3 shadow-xl">
               <div>
                 <label className={tinyLabel} htmlFor="bar-rps">RPS base</label>
-                <input id="bar-rps" type="number" min={1} className={popField} value={baseRps}
-                  onChange={(e) => setBaseRps(Math.max(1, Number(e.target.value) || 1))} />
+                <input id="bar-rps" type="number" min={1} className={popField} value={params.base_rps}
+                  onChange={(e) => setParams({ base_rps: Math.max(1, Number(e.target.value) || 1) })} />
               </div>
               <div>
-                <label className={tinyLabel}>Cache hit — {Math.round(cacheHit * 100)}%</label>
-                <input type="range" min={0} max={1} step={0.01} value={cacheHit}
-                  onChange={(e) => setCacheHit(Number(e.target.value))}
+                <label className={tinyLabel}>Cache hit — {Math.round(params.cache_hit_rate * 100)}%</label>
+                <input type="range" min={0} max={1} step={0.01} value={params.cache_hit_rate}
+                  onChange={(e) => setParams({ cache_hit_rate: Number(e.target.value) })}
                   className="w-full accent-[#E8622C]" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className={tinyLabel} htmlFor="bar-p99">p99 alvo (ms)</label>
                   <input id="bar-p99" type="number" min={1} placeholder="—" className={popField}
-                    value={p99Target} onChange={(e) => setP99Target(e.target.value)} />
+                    value={params.p99_target_ms ?? ""}
+                    onChange={(e) => setParams({ p99_target_ms: e.target.value ? Number(e.target.value) : null })} />
                 </div>
                 <div>
                   <label className={tinyLabel} htmlFor="bar-avail">Disp. alvo (%)</label>
                   <input id="bar-avail" type="number" min={90} max={100} step={0.01}
-                    placeholder="—" className={popField} value={availTarget}
-                    onChange={(e) => setAvailTarget(e.target.value)} />
+                    placeholder="—" className={popField}
+                    value={params.availability_target_pct ?? ""}
+                    onChange={(e) => setParams({ availability_target_pct: e.target.value ? Number(e.target.value) : null })} />
                 </div>
               </div>
             </div>
