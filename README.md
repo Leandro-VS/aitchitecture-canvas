@@ -13,6 +13,7 @@ O app propõe:
 - Simulador Deterministico de carga - gargalos, latência, disponibilidade
 - Pré-ADR para agilizar o processo e discussões
 
+> Projeto completamente inspirado na ferramenta de estudo [System Design Playground](https://system-design-playground.replit.app) excelente, criado pelo [Lucas Montano](https://www.youtube.com/@LucasMontano)
 
 ## Arquitetura final (visão)
 
