@@ -13,8 +13,8 @@
       {
         "op": "add_node",
         "id": "new-guardrails",
-        "archetype": "guardrails",
-        "name": "Guardrails (saída)",
+        "archetype": "output-guardrail",
+        "name": "Output Guardrail",
         "subtitle": "inspeção de resposta"
       },
       {

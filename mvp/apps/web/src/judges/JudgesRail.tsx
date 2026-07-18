@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** Aba vertical na borda direita que expande o painel do Juiz sobre o canvas.
- *  O estado open vive na Session: com o painel aberto, o Ask AI é "empurrado"
+ *  O estado open vive na Session: com o painel aberto, o Ask AIrchitect é "empurrado"
  *  para a esquerda em vez de ficar escondido. */
 export function JudgesRail({ open, onToggle, ...panelProps }: Props) {
   if (!open) {
@@ -17,8 +17,8 @@ export function JudgesRail({ open, onToggle, ...panelProps }: Props) {
       <button
         onClick={() => onToggle(true)}
         className="absolute right-0 top-1/2 z-20 -translate-y-1/2 select-none rounded-l-md
-                   border border-r-0 border-white/10 bg-panel px-1.5 py-4 font-mono
-                   text-[10px] uppercase tracking-widest text-ink/60 shadow-xl hover:text-ink"
+                   border border-r-0 border-white/10 bg-panel px-2.5 py-6 font-mono
+                   text-[11px] uppercase tracking-widest text-ink/60 shadow-xl hover:text-ink"
         style={{ writingMode: "vertical-rl" }}
       >
         AI Judge

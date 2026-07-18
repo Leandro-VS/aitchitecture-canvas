@@ -43,21 +43,106 @@ URL_SHORTENER = canvas(
 def test_catalog_keeps_ai_last_and_contains_medium_scale_components():
     categories = list(dict.fromkeys(item["category"] for item in CATALOG))
     archetypes = {item["archetype"] for item in CATALOG}
+    category_by_archetype = {item["archetype"]: item["category"] for item in CATALOG}
 
     assert categories == CATEGORY_ORDER
+    assert categories[-2] == "Machine Learning"
     assert categories[-1] == "AI & Agents"
     assert {
         "model-router",
         "model-endpoint-realtime",
+        "model-endpoint-async",
         "model-endpoint-batch",
+        "model-endpoint-serverless",
+        "feature-store",
+        "model-registry",
+        "ml-training-pipeline",
+        "model-monitoring",
         "rag-retriever",
         "tool-registry",
         "agent-memory",
         "prompt-store",
         "mcp-gateway",
         "llm-observability",
+        "guardrails",
+        "output-guardrail",
     } <= archetypes
+    assert all(
+        category_by_archetype[archetype] == "Machine Learning"
+        for archetype in {
+            "model-endpoint-realtime",
+            "model-endpoint-async",
+            "model-endpoint-batch",
+            "model-endpoint-serverless",
+            "feature-store",
+            "model-registry",
+            "ml-training-pipeline",
+            "model-monitoring",
+        }
+    )
     assert {"dead-letter-queue", "dlq-worker"} <= archetypes
+    assert all(item["description"].strip() for item in CATALOG)
+
+
+def test_async_inference_turns_excess_work_into_backlog_without_online_errors():
+    diagram = canvas(
+        [node("client", "client"), node("async", "model-endpoint-async")],
+        [edge("client", "async")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=1_000), SPECS)
+
+    endpoint = result.nodes["async"]
+    assert endpoint.profile == "Inferência assíncrona"
+    assert endpoint.backlog_messages > 0
+    assert endpoint.status == "backlogged"
+    assert endpoint.error_rate == 0
+    assert result.error_rate == 0
+    assert result.availability_pct == 100
+
+
+def test_batch_inference_is_offline_work_and_does_not_pollute_online_availability():
+    diagram = canvas(
+        [node("client", "client"), node("batch", "model-endpoint-batch")],
+        [edge("client", "batch")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=1_000), SPECS)
+
+    batch = result.nodes["batch"]
+    assert batch.profile == "Processamento em lote"
+    assert batch.backlog_messages > 0
+    assert batch.error_rate == 0
+    assert result.availability_pct == 100
+
+
+def test_serverless_inference_exposes_cold_start_in_the_first_window():
+    diagram = canvas(
+        [node("client", "client"), node("endpoint", "model-endpoint-serverless")],
+        [edge("client", "endpoint")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100), SPECS)
+
+    assert result.nodes["endpoint"].profile == "Inferência serverless"
+    assert result.timeline[0].p99_ms > result.timeline[1].p99_ms
+    assert result.timeline[0].p99_ms - result.timeline[1].p99_ms == 600
+
+
+def test_model_observability_stays_out_of_the_online_latency_path():
+    diagram = canvas(
+        [
+            node("client", "client"),
+            node("app", "app-server"),
+            node("monitor", "model-monitoring"),
+        ],
+        [edge("client", "app"), edge("app", "monitor")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100), SPECS)
+
+    assert result.nodes["monitor"].rps == 100
+    assert result.p99_ms == result.nodes["app"].latency_ms
 
 
 def test_deterministic():
@@ -68,13 +153,15 @@ def test_deterministic():
 
 
 def test_bottleneck_is_the_database():
-    # 600 rps > 300 de capacidade do sql-db → gargalo com erro e latência degradada
+    # Escritas custam mais work units no store stateful; 300 é a calibração
+    # nominal por unidade, não um limite universal em RPS.
     result = simulate(URL_SHORTENER, SimParams(base_rps=200, traffic_multiplier=3), SPECS)
     assert result.bottleneck == "db"
     db = result.nodes["db"]
     assert db.health == "critical"
-    assert db.cpu == 2.0
-    assert db.error_rate == 0.5
+    assert db.cpu == 2.4
+    assert db.capacity_rps == 250
+    assert db.error_rate == 0.5833
     assert result.availability_pct < 100
     assert any(t.severity == "critical" for t in result.tips)
 
@@ -105,8 +192,9 @@ def test_replicas_increase_capacity():
         [edge("client", "app"), edge("app", "db")],
     )
     result = simulate(scaled, SimParams(base_rps=200, traffic_multiplier=3), SPECS)
-    assert result.nodes["db"].cpu == round(600 / 900, 4)
-    assert result.nodes["db"].health == "ok"
+    assert result.nodes["db"].cpu == 0.8
+    assert result.nodes["db"].capacity_rps == 750
+    assert result.nodes["db"].health == "hot"
 
 
 def test_async_path_does_not_enter_p99():
@@ -143,15 +231,18 @@ def test_tutorial_bottlenecks_follow_the_progressive_story():
 
     initial = simulate(base, params, SPECS)
     assert initial.bottleneck == "app"
-    assert initial.nodes["app"].cpu == round(3500 / 1500, 4)
+    assert initial.nodes["app"].cpu == 2.38
     assert initial.p99_ms > 200
 
     base["nodes"][1]["data"]["replicas"] = 3
+    base["nodes"].append(node("lb", "load-balancer"))
+    base["edges"] = [edge("client", "lb"), edge("lb", "app"), edge("app", "db")]
     scaled = simulate(base, params, SPECS)
+    assert scaled.nodes["lb"].health == "ok"
     assert scaled.bottleneck == "db"
-    assert scaled.nodes["app"].health == "ok"
+    assert scaled.nodes["app"].health == "hot"
     assert scaled.nodes["db"].health == "critical"
-    assert scaled.p99_ms == 205
+    assert scaled.p99_ms > 200
 
     base["nodes"].append(node("cache", "cache"))
     base["edges"].append(edge("app", "cache", "cache_lookup"))
@@ -160,6 +251,103 @@ def test_tutorial_bottlenecks_follow_the_progressive_story():
     assert cached.nodes["db"].health == "ok"
     assert cached.error_rate == 0
     assert cached.p99_ms < 200
+
+
+def test_simulation_parameters_start_with_useful_targets():
+    params = SimParams()
+
+    assert params.capacity_profile == "nominal"
+    assert params.base_rps == 100
+    assert params.cache_hit_rate == 0.8
+    assert params.p99_target_ms == 250
+    assert params.availability_target_pct == 99.9
+
+
+def test_size_and_capacity_profile_change_effective_capacity():
+    large = canvas(
+        [node("client", "client"), node("app", "app-server", size="large")],
+        [edge("client", "app")],
+    )
+    nominal = simulate(large, SimParams(base_rps=1500), SPECS)
+    conservative = simulate(
+        large,
+        SimParams(base_rps=1500, capacity_profile="conservative"),
+        SPECS,
+    )
+
+    assert nominal.nodes["app"].size == "large"
+    assert nominal.nodes["app"].capacity_rps > conservative.nodes["app"].capacity_rps
+    assert nominal.nodes["app"].cpu < conservative.nodes["app"].cpu
+
+
+def test_elastic_scaling_reacts_after_delay_and_preserves_the_bad_interval():
+    elastic = canvas(
+        [
+            node("client", "client"),
+            node(
+                "app",
+                "app-server",
+                scaling="elastic",
+                replicas=1,
+                maxReplicas=6,
+            ),
+        ],
+        [edge("client", "app")],
+    )
+    result = simulate(elastic, SimParams(base_rps=3000, read_ratio=1), SPECS)
+
+    assert result.nodes["app"].active_units == 3
+    assert result.nodes["app"].scaling_events == 1
+    assert result.nodes["app"].status == "throttled"  # o pico anterior não é apagado
+    assert result.timeline[0].error_rate > 0
+    assert result.timeline[-1].error_rate == 0
+    assert result.scaling_events[0].second == 20
+
+
+def test_queue_backlog_caps_worker_instead_of_inventing_worker_errors():
+    queued = canvas(
+        [
+            node("queue", "message-queue"),
+            node("worker", "worker", size="small"),
+        ],
+        [edge("queue", "worker", "async_message")],
+    )
+    result = simulate(queued, SimParams(base_rps=3000), SPECS)
+
+    assert result.bottleneck == "queue"
+    assert result.nodes["queue"].status == "backlogged"
+    assert result.nodes["queue"].backlog_messages > 0
+    assert result.nodes["worker"].rps < 3000
+    assert result.nodes["worker"].cpu == 1
+    assert result.nodes["worker"].error_rate == 0
+    assert result.error_rate == 0
+
+
+def test_hot_partition_and_cold_cache_are_temporal_scenarios():
+    with_cache = canvas(
+        [
+            node("client", "client"),
+            node("app", "app-server", replicas=2),
+            node("cache", "cache"),
+            node("db", "nosql-db"),
+        ],
+        [edge("client", "app"), edge("app", "cache", "cache_lookup"), edge("app", "db")],
+    )
+    steady = simulate(with_cache, SimParams(base_rps=2400, cache_hit_rate=0.9), SPECS)
+    hot = simulate(
+        with_cache,
+        SimParams(base_rps=2400, cache_hit_rate=0.9, scenario="hot_partition"),
+        SPECS,
+    )
+    cold = simulate(
+        with_cache,
+        SimParams(base_rps=2400, cache_hit_rate=0.9, scenario="cold_cache"),
+        SPECS,
+    )
+
+    assert hot.nodes["db"].cpu > steady.nodes["db"].cpu
+    assert cold.timeline[0].error_rate > cold.timeline[-1].error_rate
+    assert cold.timeline[-1].backlog_messages == 0
 
 
 def test_async_writes_and_dlq_receive_only_their_traffic_share():
@@ -225,6 +413,235 @@ def test_p99_target_generates_tip():
         URL_SHORTENER, SimParams(p99_target_ms=10, availability_target_pct=99.9), SPECS
     )
     assert any("acima do alvo" in t.message for t in result.tips)
+
+
+def test_prompt_attack_without_guardrail_reaches_the_llm():
+    diagram = canvas(
+        [node("client", "client"), node("llm", "llm-gateway")],
+        [edge("client", "llm", "ai_call")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+
+    assert result.nodes["llm"].rps == 100
+    assert result.nodes["llm"].attack_rps == 30
+    assert any("ataques" in tip.message for tip in result.tips)
+
+
+def test_input_guardrail_blocks_single_turn_before_the_llm_but_not_multi_turn():
+    diagram = canvas(
+        [
+            node("client", "client"),
+            node("input", "guardrails"),
+            node("llm", "llm-gateway"),
+        ],
+        [edge("client", "input", "validation"), edge("input", "llm", "ai_call")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+
+    assert result.nodes["input"].blocked_rps == 20
+    assert result.nodes["llm"].rps == 80
+    assert result.nodes["llm"].attack_rps == 10
+    assert result.availability_pct == 100
+
+
+def test_history_guardrail_catches_multi_turn_and_costs_more_than_current_turn():
+    current = canvas(
+        [node("client", "client"), node("guard", "guardrails"), node("llm", "llm-gateway")],
+        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+    )
+    history = canvas(
+        [
+            node("client", "client"),
+            node("guard", "guardrails", guardrailScope="recent_history"),
+            node("llm", "llm-gateway"),
+        ],
+        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+    )
+
+    current_result = simulate(current, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+    history_result = simulate(history, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+
+    assert history_result.nodes["guard"].blocked_rps == 30
+    assert history_result.nodes["llm"].attack_rps == 0
+    assert history_result.nodes["guard"].capacity_rps < current_result.nodes["guard"].capacity_rps
+    assert history_result.nodes["guard"].latency_ms > current_result.nodes["guard"].latency_ms
+
+
+def test_output_guardrail_filters_after_the_llm_without_saving_model_calls():
+    diagram = canvas(
+        [
+            node("client", "client"),
+            node("llm", "llm-gateway"),
+            node("output", "output-guardrail", guardrailScope="recent_history"),
+        ],
+        [edge("client", "llm", "ai_call"), edge("llm", "output", "validation")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+
+    assert result.nodes["llm"].rps == 100
+    assert result.nodes["output"].blocked_rps == 30
+
+
+def test_guardrail_failure_modes_separate_availability_from_uninspected_traffic():
+    closed = canvas(
+        [node("client", "client"), node("guard", "guardrails"), node("llm", "llm-gateway")],
+        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+    )
+    opened = canvas(
+        [
+            node("client", "client"),
+            node("guard", "guardrails", guardrailFailureMode="fail_open"),
+            node("llm", "llm-gateway"),
+        ],
+        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+    )
+    params = SimParams(base_rps=2_000, scenario="prompt_attack")
+
+    closed_result = simulate(closed, params, SPECS)
+    opened_result = simulate(opened, params, SPECS)
+
+    assert closed_result.availability_pct < 100
+    assert closed_result.nodes["guard"].uninspected_rps == 0
+    assert opened_result.nodes["guard"].uninspected_rps > 0
+    assert opened_result.nodes["guard"].error_rate == 0
+
+
+def test_telemetry_and_model_updates_do_not_extend_the_online_path():
+    diagram = canvas(
+        [
+            node("client", "client"),
+            node("app", "app-server"),
+            node("monitor", "model-monitoring"),
+            node("registry", "model-registry"),
+        ],
+        [
+            edge("client", "app"),
+            edge("app", "monitor", "telemetry"),
+            edge("registry", "app", "model_update"),
+        ],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100), SPECS)
+
+    assert result.nodes["monitor"].rps == 100
+    assert result.nodes["registry"].rps == 0
+    assert result.p99_ms == result.nodes["app"].latency_ms
+
+
+def test_conversational_tutorial_layered_guardrails_match_the_story():
+    diagram = canvas(
+        [
+            node("client", "client"),
+            node("app", "app-server"),
+            node("early", "guardrails"),
+            node("memory", "agent-memory"),
+            node("history", "guardrails", guardrailScope="recent_history"),
+            node("cache", "semantic-cache"),
+            node("rag", "rag-retriever"),
+            node("embedding", "embedding-service"),
+            node("vectors", "vector-db"),
+            node("llm", "llm-gateway"),
+            node("output", "output-guardrail", guardrailScope="recent_history"),
+            node("observe", "llm-observability"),
+        ],
+        [
+            edge("client", "app"),
+            edge("app", "early", "validation"),
+            edge("early", "memory", "retrieval"),
+            edge("memory", "history", "validation"),
+            edge("history", "cache", "cache_lookup"),
+            edge("history", "rag", "retrieval"),
+            edge("rag", "embedding", "ai_call"),
+            edge("embedding", "vectors", "retrieval"),
+            edge("vectors", "llm", "ai_call"),
+            edge("llm", "output", "validation"),
+            edge("llm", "observe", "telemetry"),
+        ],
+    )
+
+    result = simulate(
+        diagram,
+        SimParams(
+            base_rps=100,
+            read_ratio=1,
+            cache_hit_rate=0.7,
+            scenario="prompt_attack",
+            p99_target_ms=2500,
+        ),
+        SPECS,
+    )
+
+    assert result.nodes["early"].blocked_rps == 20
+    assert result.nodes["history"].blocked_rps == 10
+    assert result.nodes["llm"].attack_rps == 0
+    assert result.nodes["llm"].rps == 21
+    assert result.nodes["output"].blocked_rps > 0
+    assert result.nodes["observe"].rps == result.nodes["llm"].rps
+    assert result.availability_pct == 100
+
+
+def test_fraud_tutorial_scenarios_move_the_real_bottleneck():
+    online = canvas(
+        [
+            node("client", "client"),
+            node("api", "api-gateway"),
+            node("app", "app-server"),
+            node("endpoint", "model-endpoint-realtime"),
+        ],
+        [edge("client", "api"), edge("api", "app"), edge("app", "endpoint", "ai_call")],
+    )
+    ramp = simulate(
+        online,
+        SimParams(base_rps=500, traffic_multiplier=3, read_ratio=0.9, scenario="ramp"),
+        SPECS,
+    )
+    assert ramp.bottleneck == "endpoint"
+    assert ramp.nodes["endpoint"].error_rate > 0
+
+    online["nodes"][2]["data"]["replicas"] = 2
+    online["nodes"][3]["data"]["replicas"] = 4
+    scaled = simulate(
+        online,
+        SimParams(base_rps=500, traffic_multiplier=3, read_ratio=0.9, scenario="ramp"),
+        SPECS,
+    )
+    assert scaled.error_rate == 0
+
+    online["nodes"].append(node("features", "feature-store"))
+    online["edges"] = [
+        edge("client", "api"),
+        edge("api", "app"),
+        edge("app", "features", "retrieval"),
+        edge("features", "endpoint", "ai_call"),
+    ]
+    hot = simulate(
+        online,
+        SimParams(
+            base_rps=500,
+            traffic_multiplier=4,
+            read_ratio=0.9,
+            scenario="hot_partition",
+        ),
+        SPECS,
+    )
+    assert hot.bottleneck == "features"
+    assert hot.nodes["features"].error_rate > 0
+
+    online["nodes"][-1]["data"]["replicas"] = 2
+    fixed = simulate(
+        online,
+        SimParams(
+            base_rps=500,
+            traffic_multiplier=4,
+            read_ratio=0.9,
+            scenario="hot_partition",
+        ),
+        SPECS,
+    )
+    assert fixed.error_rate == 0
 
 
 def test_empty_canvas():

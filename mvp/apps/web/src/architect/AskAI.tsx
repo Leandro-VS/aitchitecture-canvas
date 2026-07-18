@@ -20,7 +20,7 @@ interface Props {
   diagramId: string;
   hasIntake: boolean;
   onNeedContext: () => void;
-  /** painel do AI Judge aberto → empurra o Ask AI para a esquerda */
+  /** painel do AI Judge aberto → empurra o Ask AIrchitect para a esquerda */
   shiftLeft: boolean;
 }
 
@@ -218,13 +218,13 @@ export function AskAI({ diagramId, hasIntake, onNeedContext, shiftLeft }: Props)
     return (
       <button
         onClick={() => (hasIntake ? setOpen(true) : onNeedContext())}
-        title={hasIntake ? "converse com o Arquiteto" : "requer o contexto preenchido"}
+        title={hasIntake ? "Abrir Ask AIrchitect" : "Ask AIrchitect requer o contexto preenchido"}
         className="absolute top-3 z-20 flex select-none items-center gap-2 rounded-full
                    border border-primary/50 bg-panel px-4 py-2 shadow-xl hover:border-primary"
         style={{ right: shiftLeft ? 340 : 12 }}
       >
         <span className="text-base">💬</span>
-        <span className="font-display text-sm font-semibold text-ink">Ask AI</span>
+        <span className="font-display text-sm font-semibold text-ink">Ask AIrchitect</span>
       </button>
     );
   }
@@ -237,7 +237,7 @@ export function AskAI({ diagramId, hasIntake, onNeedContext, shiftLeft }: Props)
     >
       <header className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <span>💬</span>
-        <h2 className="font-display text-sm font-semibold">Ask AI</h2>
+        <h2 className="font-display text-sm font-semibold">Ask AIrchitect</h2>
         <span className="font-mono text-[9px] uppercase tracking-widest text-ink/40">
           arquiteto
         </span>

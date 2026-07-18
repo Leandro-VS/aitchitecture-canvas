@@ -23,6 +23,8 @@ export const INTENTS = [
   "ai_call",
   "validation",
   "dead_letter",
+  "telemetry",
+  "model_update",
 ] as const;
 export type Intent = (typeof INTENTS)[number];
 
@@ -31,7 +33,17 @@ export interface ArchNodeData extends Record<string, unknown> {
   label: string; // label do arquétipo (ex.: "SQL Database")
   name: string; // nome exibido (default: label)
   subtitle?: string; // D16 — opcional, como tudo aqui (decisão: sem gate de metadados)
-  replicas?: number; // controlado pelos botões −/+ no próprio nó
+  /** unidades mínimas/ativas no início da janela; legado mantém default 1 */
+  replicas?: number;
+  /** porte cloud-agnostic: multiplica a calibração por unidade */
+  size?: "small" | "medium" | "large";
+  /** fixa mantém replicas; elástica pode crescer até maxReplicas com atraso */
+  scaling?: "fixed" | "elastic";
+  maxReplicas?: number;
+  /** quanto contexto o guardrail analisa */
+  guardrailScope?: "current_turn" | "recent_history";
+  /** comportamento quando a inspeção não consegue acompanhar o tráfego */
+  guardrailFailureMode?: "fail_closed" | "fail_open";
   /** sugestão do Arquiteto ainda não aceita — excluída do autosave/simulação/juiz */
   ghost?: boolean;
   proposalId?: string; // message_id do diff que criou este elemento
@@ -42,6 +54,14 @@ export interface AnnotationData extends Record<string, unknown> {
 }
 
 export type CanvasNode = Node<ArchNodeData, "arch"> | Node<AnnotationData, "annotation">;
+
+interface PaletteNodeDefaults {
+  scaling?: "fixed" | "elastic";
+  replicas?: number;
+  maxReplicas?: number;
+  guardrailScope?: "current_turn" | "recent_history";
+  guardrailFailureMode?: "fail_closed" | "fail_open";
+}
 
 export const isArchNode = (n: CanvasNode): n is Node<ArchNodeData, "arch"> =>
   n.type === "arch";
@@ -66,7 +86,12 @@ interface CanvasStore {
   onConnect: (connection: Connection) => void;
   confirmConnection: (intent: Intent) => void;
   cancelConnection: () => void;
-  addFromPalette: (archetype: string, label: string, position: XYPosition) => void;
+  addFromPalette: (
+    archetype: string,
+    label: string,
+    position: XYPosition,
+    defaults?: PaletteNodeDefaults,
+  ) => void;
   addAnnotation: (position: XYPosition) => void;
   updateNodeData: (id: string, fields: Record<string, unknown>) => void;
   updateEdgeData: (id: string, fields: Record<string, unknown>) => void;
@@ -94,8 +119,10 @@ export const DEFAULT_SIM_PARAMS: SimParams = {
   traffic_multiplier: 1,
   read_ratio: 0.8,
   cache_hit_rate: 0.8,
-  p99_target_ms: null,
-  availability_target_pct: null,
+  scenario: "steady",
+  capacity_profile: "nominal",
+  p99_target_ms: 250,
+  availability_target_pct: 99.9,
 };
 
 export const useCanvas = create<CanvasStore>()(
@@ -112,10 +139,15 @@ export const useCanvas = create<CanvasStore>()(
       setEditingNode: (id) => set({ editingNodeId: id }),
 
       load: (diagramId, nodes, edges, simParams) => {
+        const loadedParams = { ...DEFAULT_SIM_PARAMS, ...simParams };
+        // Diagramas anteriores podem ter persistido os alvos como null. A barra
+        // sempre abre com valores úteis, sem apagar os demais ajustes salvos.
+        loadedParams.p99_target_ms ??= DEFAULT_SIM_PARAMS.p99_target_ms;
+        loadedParams.availability_target_pct ??= DEFAULT_SIM_PARAMS.availability_target_pct;
         set({
           diagramId, nodes, edges, rev: 0,
           pendingConnection: null, sim: null, editingNodeId: null,
-          simParams: { ...DEFAULT_SIM_PARAMS, ...simParams },
+          simParams: loadedParams,
         });
         useCanvas.temporal.getState().clear(); // histórico de undo não cruza diagramas
       },
@@ -182,7 +214,7 @@ export const useCanvas = create<CanvasStore>()(
 
       cancelConnection: () => set({ pendingConnection: null }),
 
-      addFromPalette: (archetype, label, position) =>
+      addFromPalette: (archetype, label, position, defaults) =>
         set((s) => ({
           rev: s.rev + 1,
           nodes: [
@@ -191,7 +223,17 @@ export const useCanvas = create<CanvasStore>()(
               id: newId("n"),
               type: "arch" as const,
               position,
-              data: { archetype, label, name: label },
+              data: {
+                archetype,
+                label,
+                name: label,
+                size: "medium",
+                scaling: defaults?.scaling ?? "fixed",
+                replicas: defaults?.replicas ?? 1,
+                maxReplicas: defaults?.maxReplicas ?? 10,
+                guardrailScope: defaults?.guardrailScope,
+                guardrailFailureMode: defaults?.guardrailFailureMode,
+              },
             },
           ],
         })),
@@ -270,6 +312,10 @@ export const useCanvas = create<CanvasStore>()(
             label: labelOf[op.archetype] ?? op.archetype,
             name: op.name,
             subtitle: op.subtitle ?? undefined,
+            size: "medium",
+            scaling: "fixed",
+            replicas: 1,
+            maxReplicas: 10,
             ghost: true,
             proposalId: messageId,
           },

@@ -33,6 +33,7 @@ export interface Archetype {
   archetype: string;
   archetype_class: string;
   label: string;
+  description: string;
   category: string;
   base_rps: number | null;
   base_latency_ms: number;
@@ -90,7 +91,7 @@ export const patchDiagram = (
 export const deleteDiagram = (id: string) =>
   api<void>(`/api/diagrams/${id}`, { method: "DELETE" });
 
-// --- arquiteto / Ask AI (M8) + bootstrap (M13) ---
+// --- arquiteto / Ask AIrchitect (M8) + bootstrap (M13) ---
 
 export interface DiffOpAddNode {
   op: "add_node";
@@ -262,16 +263,47 @@ export interface SimParams {
   traffic_multiplier: number;
   read_ratio: number;
   cache_hit_rate: number;
+  scenario: "steady" | "spike" | "ramp" | "hot_partition" | "cold_cache" | "prompt_attack";
+  capacity_profile: "conservative" | "nominal" | "optimistic";
   p99_target_ms?: number | null;
   availability_target_pct?: number | null;
 }
 
 export interface NodeMetrics {
   rps: number;
+  work_units: number;
+  capacity_rps: number | null;
   cpu: number;
   latency_ms: number;
   error_rate: number;
   health: "ok" | "hot" | "critical";
+  status: "steady" | "scaling" | "backlogged" | "throttled";
+  profile: string;
+  size: "small" | "medium" | "large";
+  scaling: "fixed" | "elastic";
+  active_units: number;
+  max_units: number;
+  backlog_messages: number;
+  scaling_events: number;
+  attack_rps: number;
+  blocked_rps: number;
+  uninspected_rps: number;
+}
+
+export interface SimulationTimelinePoint {
+  second: number;
+  input_rps: number;
+  p99_ms: number;
+  error_rate: number;
+  backlog_messages: number;
+  bottleneck: string | null;
+}
+
+export interface ScalingEvent {
+  node_id: string;
+  second: number;
+  from_units: number;
+  to_units: number;
 }
 
 export interface AdvisorTip {
@@ -282,12 +314,19 @@ export interface AdvisorTip {
 
 export interface SimResult {
   total_rps: number;
+  peak_rps: number;
+  duration_seconds: number;
+  scenario: SimParams["scenario"];
+  capacity_profile: SimParams["capacity_profile"];
   avg_latency_ms: number;
   p99_ms: number;
   error_rate: number;
   availability_pct: number;
+  max_backlog_messages: number;
   bottleneck: string | null;
   nodes: Record<string, NodeMetrics>;
+  timeline: SimulationTimelinePoint[];
+  scaling_events: ScalingEvent[];
   tips: AdvisorTip[];
   targets: { p99_ms: number | null; availability_pct: number | null };
 }

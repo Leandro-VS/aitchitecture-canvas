@@ -29,6 +29,7 @@ import { isIntakeComplete, toFormValues, toIntakeDraftPayload } from "../intake/
 import { JudgesRail } from "../judges/JudgesRail";
 import { SimResults } from "../simulation/SimResults";
 import { SimulationBar } from "../simulation/SimulationBar";
+import { parseTutorialId } from "../tutorial/catalog";
 import { useTutorialSignals } from "../tutorial/signals";
 import { TutorialOverlay } from "../tutorial/TutorialOverlay";
 
@@ -46,6 +47,7 @@ function Canvas() {
   const onConnect = useCanvas((s) => s.onConnect);
   const addFromPalette = useCanvas((s) => s.addFromPalette);
   const addAnnotation = useCanvas((s) => s.addAnnotation);
+  const setEditingNode = useCanvas((s) => s.setEditingNode);
   const { screenToFlowPosition } = useReactFlow();
 
   return (
@@ -57,6 +59,7 @@ function Canvas() {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      onPaneClick={() => setEditingNode(null)}
       onDrop={(e) => {
         const raw = e.dataTransfer.getData(ARCHETYPE_DRAG_TYPE);
         if (!raw) return;
@@ -64,9 +67,19 @@ function Canvas() {
         const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const payload = JSON.parse(raw) as
           | { kind: "annotation" }
-          | { archetype: string; label: string };
+          | {
+              archetype: string;
+              label: string;
+              defaults?: {
+                scaling?: "fixed" | "elastic";
+                replicas?: number;
+                maxReplicas?: number;
+                guardrailScope?: "current_turn" | "recent_history";
+                guardrailFailureMode?: "fail_closed" | "fail_open";
+              };
+            };
         if ("kind" in payload) addAnnotation(position);
-        else addFromPalette(payload.archetype, payload.label, position);
+        else addFromPalette(payload.archetype, payload.label, position, payload.defaults);
       }}
       onDragOver={(e) => {
         e.preventDefault();
@@ -105,7 +118,8 @@ export function Session() {
   const [exporting, setExporting] = useState(false);
   const [judgesOpen, setJudgesOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const tutorialActive = searchParams.get("tutorial") === "1";
+  const tutorialId = parseTutorialId(searchParams.get("tutorial"));
+  const tutorialActive = tutorialId !== null;
 
   // sinais do tutorial não vazam entre diagramas/sessões
   useEffect(() => {
@@ -248,7 +262,7 @@ export function Session() {
           <Palette />
           <SimulationBar diagramId={d.id} />
           <SimResults />
-          <PropertiesCard shiftLeft={judgesOpen} />
+          <PropertiesCard />
           <AskAI
             diagramId={d.id}
             hasIntake={hasCompleteIntake}
@@ -262,9 +276,10 @@ export function Session() {
             open={judgesOpen}
             onToggle={setJudgesOpen}
           />
-          {tutorialActive && (
+          {tutorialId && (
             <TutorialOverlay
               diagramId={d.id}
+              tutorialId={tutorialId}
               hasIntake={hasCompleteIntake}
               onFinish={() => setSearchParams({}, { replace: true })}
             />

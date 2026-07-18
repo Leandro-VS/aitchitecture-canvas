@@ -1,0 +1,122 @@
+{
+ "model": "qwen2.5:7b-instruct",
+ "stream": false,
+ "options": {
+  "temperature": 0
+ },
+ "format": {
+  "type": "object",
+  "required": [
+   "content"
+  ],
+  "properties": {
+   "content": {
+    "type": "string"
+   },
+   "proposed_diff": {
+    "anyOf": [
+     {
+      "type": "null"
+     },
+     {
+      "type": "object",
+      "required": [
+       "rationale",
+       "ops"
+      ],
+      "properties": {
+       "rationale": {
+        "type": "string"
+       },
+       "citations": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "required": [
+          "doc_id",
+          "section"
+         ],
+         "properties": {
+          "doc_id": {
+           "type": "string"
+          },
+          "section": {
+           "type": "string"
+          },
+          "excerpt": {
+           "type": "string"
+          }
+         }
+        }
+       },
+       "ops": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "required": [
+          "op"
+         ],
+         "properties": {
+          "op": {
+           "enum": [
+            "add_node",
+            "connect",
+            "update_metadata",
+            "remove_node"
+           ]
+          },
+          "id": {
+           "type": "string"
+          },
+          "archetype": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "subtitle": {
+           "type": "string"
+          },
+          "source": {
+           "type": "string"
+          },
+          "target": {
+           "type": "string"
+          },
+          "intent": {
+           "enum": [
+            "request",
+            "cache_lookup",
+            "async_message",
+            "retrieval",
+            "ai_call",
+            "validation"
+           ]
+          },
+          "fields": {
+           "type": "object"
+          }
+         }
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ "messages": [
+  {
+   "role": "system",
+   "content": "Você é o Arquiteto: um copiloto de design de arquitetura que\nresponde na mesma tela do canvas. Fundamenta recomendações nos guidelines\nfornecidos e cita doc + seção quando aplicável (nunca invente referência).\nQuando uma mudança estrutural ajudar, proponha um diff (add_node/connect/...)\nusando apenas arquétipos do catálogo — o usuário decide aplicar ou não.\n\nResponda APENAS com um JSON: {\"content\": \"<sua resposta em texto ao usuário>\",\n\"proposed_diff\": null ou {\"rationale\": str, \"citations\": [{\"doc_id\",\"section\",\"excerpt\"}],\n\"ops\": [{\"op\":\"add_node\",\"id\",\"archetype\",\"name\",\"subtitle\"?} |\n{\"op\":\"connect\",\"source\",\"target\",\"intent\"}]}}.\nIntents válidos: request, cache_lookup, async_message, retrieval, ai_call, validation.\nArquétipos válidos: client, mobile, dns, cdn, load-balancer, api-gateway, app-server,\nworker, serverless, dlq-worker, sql-db, nosql-db, cache, object-store, vector-db,\nmessage-queue, event-stream, dead-letter-queue, llm-gateway, embedding-service,\nguardrails, semantic-cache, agent-orchestrator, model-router, model-endpoint-realtime,\nmodel-endpoint-batch, rag-retriever, tool-registry, agent-memory, prompt-store,\nmcp-gateway, llm-observability.\nEm \"source\"/\"target\" você pode referenciar nós existentes pelo id, pelo nome ou por\n\"archetype:<slug>\"."
+  },
+  {
+   "role": "user",
+   "content": "GUIDELINES:\n[REL-007 > Regra]\nOperações de escrita que se propagam para múltiplos destinos (fan-out — ex.: atualizar as timelines de milhares de seguidores, notificar N consumidores) NÃO DEVEM ser executadas de forma síncrona na requisição do usuário. A requisição publica em uma fila ou stream e retorna; workers materializam o fan-out de forma assíncrona.\n\n[REL-005 > Regra]\nCaminhos de requisição com perfil de leitura dominante (acima de ~70% de leituras) DEVEM ter uma camada de cache antes do armazenamento primário. Leituras repetitivas não devem atingir o banco no caminho crítico.\n\n[REL-007 > Racional]\nFan-out síncrono acopla a latência do usuário ao número de destinos e derruba a disponibilidade em picos. A fila absorve rajadas, dá retry com dead-letter e permite escalar os workers independentemente do caminho de leitura. O custo é consistência eventual.\n\n[GENAI-001 > Regra]\nToda chamada a modelos de linguagem DEVE passar pelo gateway corporativo de LLM. Nenhum serviço acessa provedores de modelo diretamente; credenciais de provedor não residem em serviços de aplicação.\n\n[REL-005 > Dimensionamento]\nA estratégia de invalidação (TTL curto, invalidação por evento ou write-through) deve ser explícita no desenho. Valide a taxa de hit esperada em simulação: caminhos com hit abaixo de 50% indicam chave de cache mal escolhida.\n\n[REF-ARCH-RAG-01 > Anti-padrões]\nChamar o provedor de modelo direto do App Server (viola GENAI-001). Indexação síncrona de documentos no caminho da requisição do usuário. Ausência de cache semântico em fluxos read-heavy de perguntas repetitivas.\n\nDIAGRAMA:\n{\"intake\": {\"summary\": \"Checkout de e-commerce interno: carrinho, pagamento e confirmação de pedido, integrado ao ERP existente.\", \"functional_requirements\": [\"Fechar pedido com pagamento\", \"Emitir confirmação\", \"Registrar no ERP\"], \"considerations\": \"Time pequeno (4 devs); monólito atual estável; ERP legado por trás de fila.\", \"data_classification\": \"confidencial\", \"out_of_scope\": \"logística e antifraude\"}, \"components\": [{\"id\": \"n-cli\", \"name\": \"Cliente\", \"subtitle\": null, \"archetype\": \"client\", \"replicas\": 1}, {\"id\": \"n-lb\", \"name\": \"Load Balancer\", \"subtitle\": null, \"archetype\": \"load-balancer\", \"replicas\": 1}, {\"id\": \"n-app\", \"name\": \"Checkout (monólito)\", \"subtitle\": null, \"archetype\": \"app-server\", \"replicas\": 2}, {\"id\": \"n-db\", \"name\": \"Pedidos DB\", \"subtitle\": null, \"archetype\": \"sql-db\", \"replicas\": 1}, {\"id\": \"n-q\", \"name\": \"Fila ERP\", \"subtitle\": null, \"archetype\": \"message-queue\", \"replicas\": 1}], \"connections\": [{\"from\": \"Cliente\", \"intent\": \"request\", \"to\": \"Load Balancer\"}, {\"from\": \"Load Balancer\", \"intent\": \"request\", \"to\": \"Checkout (monólito)\"}, {\"from\": \"Checkout (monólito)\", \"intent\": \"request\", \"to\": \"Pedidos DB\"}, {\"from\": \"Checkout (monólito)\", \"intent\": \"async_message\", \"to\": \"Fila ERP\"}], \"annotations\": [{\"text\": \"ERP legado só aceita integração por fila\", \"anchored_to\": \"Fila ERP\"}], \"last_simulation\": {\"params\": {\"base_rps\": 80, \"traffic_multiplier\": 1.0, \"read_ratio\": 0.5, \"cache_hit_rate\": 0.8}, \"total_rps\": 80, \"p99_ms\": 58.0, \"error_rate\": 0.0, \"availability_pct\": 100.0, \"bottleneck\": null}}"
+  },
+  {
+   "role": "user",
+   "content": "Vale a pena quebrar o checkout em microsserviços agora?"
+  }
+ ]
+}

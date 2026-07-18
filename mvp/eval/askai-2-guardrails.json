@@ -1,0 +1,122 @@
+{
+ "model": "qwen2.5:7b-instruct",
+ "stream": false,
+ "options": {
+  "temperature": 0
+ },
+ "format": {
+  "type": "object",
+  "required": [
+   "content"
+  ],
+  "properties": {
+   "content": {
+    "type": "string"
+   },
+   "proposed_diff": {
+    "anyOf": [
+     {
+      "type": "null"
+     },
+     {
+      "type": "object",
+      "required": [
+       "rationale",
+       "ops"
+      ],
+      "properties": {
+       "rationale": {
+        "type": "string"
+       },
+       "citations": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "required": [
+          "doc_id",
+          "section"
+         ],
+         "properties": {
+          "doc_id": {
+           "type": "string"
+          },
+          "section": {
+           "type": "string"
+          },
+          "excerpt": {
+           "type": "string"
+          }
+         }
+        }
+       },
+       "ops": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "required": [
+          "op"
+         ],
+         "properties": {
+          "op": {
+           "enum": [
+            "add_node",
+            "connect",
+            "update_metadata",
+            "remove_node"
+           ]
+          },
+          "id": {
+           "type": "string"
+          },
+          "archetype": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "subtitle": {
+           "type": "string"
+          },
+          "source": {
+           "type": "string"
+          },
+          "target": {
+           "type": "string"
+          },
+          "intent": {
+           "enum": [
+            "request",
+            "cache_lookup",
+            "async_message",
+            "retrieval",
+            "ai_call",
+            "validation"
+           ]
+          },
+          "fields": {
+           "type": "object"
+          }
+         }
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ "messages": [
+  {
+   "role": "system",
+   "content": "Você é o Arquiteto: um copiloto de design de arquitetura que\nresponde na mesma tela do canvas. Fundamenta recomendações nos guidelines\nfornecidos e cita doc + seção quando aplicável (nunca invente referência).\nQuando uma mudança estrutural ajudar, proponha um diff (add_node/connect/...)\nusando apenas arquétipos do catálogo — o usuário decide aplicar ou não.\n\nResponda APENAS com um JSON: {\"content\": \"<sua resposta em texto ao usuário>\",\n\"proposed_diff\": null ou {\"rationale\": str, \"citations\": [{\"doc_id\",\"section\",\"excerpt\"}],\n\"ops\": [{\"op\":\"add_node\",\"id\",\"archetype\",\"name\",\"subtitle\"?} |\n{\"op\":\"connect\",\"source\",\"target\",\"intent\"}]}}.\nIntents válidos: request, cache_lookup, async_message, retrieval, ai_call, validation.\nArquétipos válidos: client, mobile, dns, cdn, load-balancer, api-gateway, app-server,\nworker, serverless, dlq-worker, sql-db, nosql-db, cache, object-store, vector-db,\nmessage-queue, event-stream, dead-letter-queue, llm-gateway, embedding-service,\nguardrails, semantic-cache, agent-orchestrator, model-router, model-endpoint-realtime,\nmodel-endpoint-batch, rag-retriever, tool-registry, agent-memory, prompt-store,\nmcp-gateway, llm-observability.\nEm \"source\"/\"target\" você pode referenciar nós existentes pelo id, pelo nome ou por\n\"archetype:<slug>\"."
+  },
+  {
+   "role": "user",
+   "content": "GUIDELINES:\n[SEC-012 > Regra]\nTodo fluxo em que a resposta de um LLM alcança um usuário externo DEVE passar por um componente de guardrail de saída antes da entrega. O guardrail inspeciona a resposta contra as políticas de conteúdo e de vazamento de dados internos.\n\n[SEC-012 > Racional]\nRespostas não inspecionadas podem vazar dados internos, expor prompts de sistema ou entregar conteúdo fora de política. O custo do guardrail (latência adicional na casa de dezenas de milissegundos) é ordens de magnitude menor que o custo de um incidente.\n\n[GENAI-001 > Regra]\nToda chamada a modelos de linguagem DEVE passar pelo gateway corporativo de LLM. Nenhum serviço acessa provedores de modelo diretamente; credenciais de provedor não residem em serviços de aplicação.\n\n[REF-ARCH-RAG-01 > Componentes obrigatórios]\nLLM Gateway: único ponto de acesso a modelos (ver GENAI-001). Semantic Cache: na frente do LLM Gateway em fluxos de pergunta-resposta; taxa de hit típica de 30–40% em atendimento reduz custo e p99. Guardrails (saída): obrigatório em canais externos.\n\n[REF-ARCH-RAG-01 > Anti-padrões]\nChamar o provedor de modelo direto do App Server (viola GENAI-001). Indexação síncrona de documentos no caminho da requisição do usuário. Ausência de cache semântico em fluxos read-heavy de perguntas repetitivas.\n\n[REL-005 > Regra]\nCaminhos de requisição com perfil de leitura dominante (acima de ~70% de leituras) DEVEM ter uma camada de cache antes do armazenamento primário. Leituras repetitivas não devem atingir o banco no caminho crítico.\n\nDIAGRAMA:\n{\"intake\": {\"summary\": \"Assistente de atendimento com RAG que responde clientes externos a partir da base de conhecimento interna, com escalonamento para humano.\", \"functional_requirements\": [\"Responder com base na base de conhecimento\", \"Citar a fonte\", \"Escalar para humano\"], \"considerations\": \"Canal externo voltado a clientes; dados confidenciais.\", \"data_classification\": \"confidencial\", \"out_of_scope\": null}, \"components\": [{\"id\": \"n-cli\", \"name\": \"Cliente\", \"subtitle\": null, \"archetype\": \"client\", \"replicas\": 1}, {\"id\": \"n-gw\", \"name\": \"API Gateway\", \"subtitle\": null, \"archetype\": \"api-gateway\", \"replicas\": 2}, {\"id\": \"n-orq\", \"name\": \"Orquestrador de atendimento\", \"subtitle\": null, \"archetype\": \"app-server\", \"replicas\": 2}, {\"id\": \"n-sc\", \"name\": \"Semantic Cache\", \"subtitle\": null, \"archetype\": \"semantic-cache\", \"replicas\": 1}, {\"id\": \"n-llm\", \"name\": \"LLM Gateway\", \"subtitle\": null, \"archetype\": \"llm-gateway\", \"replicas\": 1}, {\"id\": \"n-vdb\", \"name\": \"Base de conhecimento\", \"subtitle\": \"índice vetorial\", \"archetype\": \"vector-db\", \"replicas\": 1}], \"connections\": [{\"from\": \"Cliente\", \"intent\": \"request\", \"to\": \"API Gateway\"}, {\"from\": \"API Gateway\", \"intent\": \"request\", \"to\": \"Orquestrador de atendimento\"}, {\"from\": \"Orquestrador de atendimento\", \"intent\": \"cache_lookup\", \"to\": \"Semantic Cache\"}, {\"from\": \"Orquestrador de atendimento\", \"intent\": \"retrieval\", \"to\": \"Base de conhecimento\"}, {\"from\": \"Orquestrador de atendimento\", \"intent\": \"ai_call\", \"to\": \"LLM Gateway\"}], \"annotations\": [], \"last_simulation\": null}"
+  },
+  {
+   "role": "user",
+   "content": "Como protejo as respostas do LLM antes de chegarem ao cliente?"
+  }
+ ]
+}

@@ -6,10 +6,11 @@ from .base import Base
 
 
 class ArchetypeConfig(Base):
-    """Tabela base do simulador (§6.1 das specs) + metadados de palette.
+    """Calibração nominal do simulador + metadados de palette.
 
-    base_rps nulo = capacidade infinita (client).
-    params: extensões GenAI (ttft_ms, tokens_per_second, custo etc.) — usadas na Fase 2.
+    base_rps é work units/s de uma unidade Medium no perfil balanceado; nulo =
+    origem sem capacidade própria. params aceita extensões como
+    simulation_profile, ttft_ms e tokens_per_second.
     """
 
     __tablename__ = "archetypes_config"
@@ -17,6 +18,7 @@ class ArchetypeConfig(Base):
     archetype: Mapped[str] = mapped_column(String(64), primary_key=True)
     archetype_class: Mapped[str] = mapped_column(String(32))
     label: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(320))
     category: Mapped[str] = mapped_column(String(32))  # grupo da palette
     base_rps: Mapped[int | None] = mapped_column(default=None)
     base_latency_ms: Mapped[float] = mapped_column(default=0)

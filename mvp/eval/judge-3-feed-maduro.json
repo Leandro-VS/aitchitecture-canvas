@@ -1,0 +1,107 @@
+{
+ "model": "qwen2.5:7b-instruct",
+ "stream": false,
+ "options": {
+  "temperature": 0
+ },
+ "format": {
+  "type": "object",
+  "required": [
+   "score",
+   "verdict",
+   "strengths",
+   "findings"
+  ],
+  "properties": {
+   "score": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 100
+   },
+   "verdict": {
+    "enum": [
+     "pass",
+     "borderline",
+     "fail"
+    ]
+   },
+   "strengths": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   },
+   "findings": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "severity",
+      "component_refs",
+      "basis",
+      "recommendation"
+     ],
+     "properties": {
+      "severity": {
+       "enum": [
+        "critical",
+        "warning",
+        "info"
+       ]
+      },
+      "component_refs": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "basis": {
+       "enum": [
+        "guideline",
+        "general"
+       ]
+      },
+      "citation": {
+       "anyOf": [
+        {
+         "type": "null"
+        },
+        {
+         "type": "object",
+         "required": [
+          "doc_id",
+          "section"
+         ],
+         "properties": {
+          "doc_id": {
+           "type": "string"
+          },
+          "section": {
+           "type": "string"
+          },
+          "excerpt": {
+           "type": "string"
+          }
+         }
+        }
+       ]
+      },
+      "recommendation": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  }
+ },
+ "messages": [
+  {
+   "role": "system",
+   "content": "Você é um comitê de arquitetura avaliando um diagrama de sistema.\nAvalie o diagrama nas três dimensões, fundamentado nos trechos de guidelines fornecidos:\n1. Confiabilidade e escala: gargalos, pontos únicos de falha, capacidade vs. NFRs,\n   uso de cache/filas, réplicas.\n2. Segurança e governança: classificação de dados, exposição externa, guardrails.\n3. Arquitetura GenAI: uso de gateway de LLM, cache semântico, guardrails de\n   entrada/saída, custo e latência de inferência.\n\nRegras de citação (obrigatórias): todo finding apoiado em guideline deve citar\ndoc_id + seção reais dos trechos fornecidos (basis=\"guideline\"); se nenhum\nguideline se aplica, basis=\"general\" e nenhuma citação. Nunca invente referência.\nResponda APENAS com JSON no schema fornecido."
+  },
+  {
+   "role": "user",
+   "content": "GUIDELINES RELEVANTES:\n[REL-005 > Regra]\nCaminhos de requisição com perfil de leitura dominante (acima de ~70% de leituras) DEVEM ter uma camada de cache antes do armazenamento primário. Leituras repetitivas não devem atingir o banco no caminho crítico.\n\n[REL-005 > Dimensionamento]\nA estratégia de invalidação (TTL curto, invalidação por evento ou write-through) deve ser explícita no desenho. Valide a taxa de hit esperada em simulação: caminhos com hit abaixo de 50% indicam chave de cache mal escolhida.\n\n[REL-007 > Regra]\nOperações de escrita que se propagam para múltiplos destinos (fan-out — ex.: atualizar as timelines de milhares de seguidores, notificar N consumidores) NÃO DEVEM ser executadas de forma síncrona na requisição do usuário. A requisição publica em uma fila ou stream e retorna; workers materializam o fan-out de forma assíncrona.\n\n[REL-007 > Requisitos do desenho]\nA fila deve aparecer explicitamente no diagrama, com o produtor publicando de forma assíncrona e os consumidores dimensionados pela vazão de escrita × fan-out médio. Defina política de retry e o comportamento em caso de mensagem envenenada (dead-letter).\n\n[REL-007 > Racional]\nFan-out síncrono acopla a latência do usuário ao número de destinos e derruba a disponibilidade em picos. A fila absorve rajadas, dá retry com dead-letter e permite escalar os workers independentemente do caminho de leitura. O custo é consistência eventual.\n\n[SEC-012 > Regra]\nTodo fluxo em que a resposta de um LLM alcança um usuário externo DEVE passar por um componente de guardrail de saída antes da entrega. O guardrail inspeciona a resposta contra as políticas de conteúdo e de vazamento de dados internos.\n\nDIAGRAMA (serialização canônica):\n{\n \"intake\": {\n  \"summary\": \"Home timeline do Twitter/X: postar tweets e ler a timeline dos seguidos, com 300M de usuários ativos por dia e leitura dominante.\",\n  \"functional_requirements\": [\n   \"Postar tweets (até 280 caracteres)\",\n   \"Seguir/deixar de seguir usuários\",\n   \"Timeline carregando em < 200ms\"\n  ],\n  \"considerations\": \"Leitura >> escrita; fan-out na escrita; consistência eventual aceitável no feed.\",\n  \"data_classification\": \"interna\",\n  \"out_of_scope\": null\n },\n \"components\": [\n  {\n   \"id\": \"n-cli\",\n   \"name\": \"Cliente\",\n   \"subtitle\": null,\n   \"archetype\": \"client\",\n   \"replicas\": 1\n  },\n  {\n   \"id\": \"n-lb\",\n   \"name\": \"Load Balancer\",\n   \"subtitle\": null,\n   \"archetype\": \"load-balancer\",\n   \"replicas\": 1\n  },\n  {\n   \"id\": \"n-api\",\n   \"name\": \"Timeline API\",\n   \"subtitle\": null,\n   \"archetype\": \"app-server\",\n   \"replicas\": 4\n  },\n  {\n   \"id\": \"n-cache\",\n   \"name\": \"Cache de timelines\",\n   \"subtitle\": \"TTL 60s\",\n   \"archetype\": \"cache\",\n   \"replicas\": 2\n  },\n  {\n   \"id\": \"n-db\",\n   \"name\": \"Tweets DB\",\n   \"subtitle\": \"shard por user_id\",\n   \"archetype\": \"nosql-db\",\n   \"replicas\": 3\n  },\n  {\n   \"id\": \"n-q\",\n   \"name\": \"Fila de fan-out\",\n   \"subtitle\": \"posts → timelines\",\n   \"archetype\": \"message-queue\",\n   \"replicas\": 1\n  },\n  {\n   \"id\": \"n-wk\",\n   \"name\": \"Fan-out worker\",\n   \"subtitle\": null,\n   \"archetype\": \"worker\",\n   \"replicas\": 3\n  },\n  {\n   \"id\": \"n-dlq\",\n   \"name\": \"DLQ\",\n   \"subtitle\": \"mensagens envenenadas\",\n   \"archetype\": \"dead-letter-queue\",\n   \"replicas\": 1\n  }\n ],\n \"connections\": [\n  {\n   \"from\": \"Cliente\",\n   \"intent\": \"request\",\n   \"to\": \"Load Balancer\"\n  },\n  {\n   \"from\": \"Load Balancer\",\n   \"intent\": \"request\",\n   \"to\": \"Timeline API\"\n  },\n  {\n   \"from\": \"Timeline API\",\n   \"intent\": \"cache_lookup\",\n   \"to\": \"Cache de timelines\"\n  },\n  {\n   \"from\": \"Timeline API\",\n   \"intent\": \"request\",\n   \"to\": \"Tweets DB\"\n  },\n  {\n   \"from\": \"Timeline API\",\n   \"intent\": \"async_message\",\n   \"to\": \"Fila de fan-out\"\n  },\n  {\n   \"from\": \"Fila de fan-out\",\n   \"intent\": \"async_message\",\n   \"to\": \"Fan-out worker\"\n  },\n  {\n   \"from\": \"Fan-out worker\",\n   \"intent\": \"request\",\n   \"to\": \"Tweets DB\"\n  },\n  {\n   \"from\": \"Fila de fan-out\",\n   \"intent\": \"async_message\",\n   \"to\": \"DLQ\"\n  }\n ],\n \"annotations\": [\n  {\n   \"text\": \"consistência eventual aceitável no feed; retry 3x antes da DLQ\",\n   \"anchored_to\": \"Fila de fan-out\"\n  }\n ],\n \"last_simulation\": {\n  \"params\": {\n   \"base_rps\": 2000,\n   \"traffic_multiplier\": 1.5,\n   \"read_ratio\": 0.9,\n   \"cache_hit_rate\": 0.85\n  },\n  \"total_rps\": 3000,\n  \"p99_ms\": 88.0,\n  \"error_rate\": 0.0,\n  \"availability_pct\": 100.0,\n  \"bottleneck\": null\n }\n}"
+  }
+ ]
+}

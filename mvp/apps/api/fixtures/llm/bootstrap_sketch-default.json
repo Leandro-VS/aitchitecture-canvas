@@ -19,7 +19,7 @@
       {"op": "add_node", "id": "sk-app", "archetype": "app-server", "name": "Orquestrador de atendimento"},
       {"op": "add_node", "id": "sk-semcache", "archetype": "semantic-cache", "name": "Semantic Cache"},
       {"op": "add_node", "id": "sk-llm", "archetype": "llm-gateway", "name": "LLM Gateway"},
-      {"op": "add_node", "id": "sk-guard", "archetype": "guardrails", "name": "Guardrails (saída)", "subtitle": "canal externo"},
+      {"op": "add_node", "id": "sk-guard", "archetype": "output-guardrail", "name": "Output Guardrail", "subtitle": "canal externo"},
       {"op": "add_node", "id": "sk-vdb", "archetype": "vector-db", "name": "Base de conhecimento", "subtitle": "índice vetorial"},
       {"op": "connect", "source": "sk-client", "target": "sk-gw", "intent": "request"},
       {"op": "connect", "source": "sk-gw", "target": "sk-app", "intent": "request"},

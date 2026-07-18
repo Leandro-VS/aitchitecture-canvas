@@ -8,7 +8,7 @@ Para otimizar o meu tempo e entregar soluções melhores, comecei a criar as arq
 O app propõe:
 
 - Canvas para System Design
-- Ask AI para tirar duvidas de arquitetura
+- Ask AIrchitect para tirar duvidas de arquitetura
 - Judge-Architect - para avaliar a arquitetura criada utilizando os Guides pré-definidos
 - Simulador Deterministico de carga - gargalos, latência, disponibilidade
 - Pré-ADR para agilizar o processo e discussões

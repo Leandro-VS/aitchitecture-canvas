@@ -8,6 +8,10 @@ export function AnnotationNode({ id, data, selected }: NodeProps<Node<Annotation
   const setEditingNode = useCanvas((s) => s.setEditingNode);
   return (
     <div
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        setEditingNode(id);
+      }}
       className={`relative max-w-56 min-w-40 rounded-md border bg-amber-200/10 px-3 py-2
         shadow-md ${selected ? "border-amber-300" : "border-amber-400/40 border-dashed"}`}
     >

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..catalog import CATEGORY_ORDER
+from ..catalog import ARCHETYPE_ORDER, CATEGORY_ORDER
 from ..db import get_session
 from ..db.models import ArchetypeConfig
 
@@ -16,6 +16,7 @@ class ArchetypeOut(BaseModel):
     archetype: str
     archetype_class: str
     label: str
+    description: str
     category: str
     base_rps: int | None
     base_latency_ms: float
@@ -28,5 +29,11 @@ async def list_archetypes(
 ) -> list[ArchetypeOut]:
     rows = list(await session.scalars(select(ArchetypeConfig)))
     category_rank = {category: index for index, category in enumerate(CATEGORY_ORDER)}
-    rows.sort(key=lambda row: (category_rank.get(row.category, 999), row.label))
+    rows.sort(
+        key=lambda row: (
+            category_rank.get(row.category, 999),
+            ARCHETYPE_ORDER.get(row.archetype, 999),
+            row.label,
+        )
+    )
     return [ArchetypeOut.model_validate(row, from_attributes=True) for row in rows]

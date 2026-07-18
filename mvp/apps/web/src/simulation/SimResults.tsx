@@ -8,6 +8,19 @@ const tipTone = {
   warning: "border-amber-400/40 text-amber-200/90",
   critical: "border-red-500/50 text-red-200/90",
 } as const;
+const scenarioLabel = {
+  steady: "Carga constante",
+  spike: "Pico repentino",
+  ramp: "Rampa de carga",
+  hot_partition: "Partição quente",
+  cold_cache: "Cache frio",
+  prompt_attack: "Ataque de prompt",
+} as const;
+const capacityLabel = {
+  conservative: "Conservador",
+  nominal: "Balanceado",
+  optimistic: "Otimista",
+} as const;
 
 function Metric({ label, value, target, bad }: {
   label: string; value: string; target?: string; bad?: boolean;
@@ -93,14 +106,14 @@ export function SimResults() {
           ⠿
         </span>
         <button onClick={() => setCollapsed(false)} className="px-2 hover:text-ink">
-          p99 {Math.round(sim.p99_ms)} ms · erro {(sim.error_rate * 100).toFixed(1)}% ▴
+          {scenarioLabel[sim.scenario]} · p99 {Math.round(sim.p99_ms)} ms · erro {(sim.error_rate * 100).toFixed(1)}% ▴
         </button>
       </div>
     );
   }
 
   return (
-    <div style={position} className="absolute z-20 w-[600px] max-w-[calc(100%-8rem)]
+    <div style={position} className="absolute z-20 w-[680px] max-w-[calc(100%-8rem)]
                     select-none rounded-xl border border-white/10 bg-panel p-3 shadow-xl">
       <div className="flex items-center divide-x divide-white/10">
         <span
@@ -111,7 +124,10 @@ export function SimResults() {
         >
           ⠿
         </span>
-        <Metric label="RPS total" value={String(Math.round(sim.total_rps))} />
+        <Metric
+          label={sim.scenario === "steady" ? "RPS total" : "RPS pico"}
+          value={String(Math.round(sim.peak_rps))}
+        />
         <Metric
           label="p99"
           value={`${Math.round(sim.p99_ms)} ms`}
@@ -147,6 +163,42 @@ export function SimResults() {
         >
           ▾
         </button>
+      </div>
+
+      <div className="mt-2 flex items-end gap-3 rounded-lg border border-white/5 bg-card/40 px-2 py-1.5">
+        <div className="min-w-44">
+          <div className="font-mono text-[9px] uppercase tracking-widest text-ink/35">
+            janela simulada
+          </div>
+          <div className="text-[11px] text-ink/65">
+            {sim.duration_seconds}s · {scenarioLabel[sim.scenario]} · {capacityLabel[sim.capacity_profile]}
+          </div>
+          <div className="font-mono text-[9px] text-ink/40">
+            {sim.scaling_events.length} evento{sim.scaling_events.length === 1 ? "" : "s"} de escala
+            {sim.max_backlog_messages > 0
+              ? ` · backlog pico ${Math.round(sim.max_backlog_messages).toLocaleString("pt-BR")}`
+              : " · sem backlog"}
+          </div>
+        </div>
+        <div className="flex h-9 min-w-0 flex-1 items-end gap-1" aria-label="linha do tempo do p99">
+          {sim.timeline.map((point) => {
+            const maxP99 = Math.max(...sim.timeline.map((item) => item.p99_ms), 1);
+            const height = Math.max(4, Math.round((point.p99_ms / maxP99) * 34));
+            const bad =
+              point.error_rate > 0.001 ||
+              (!!targets?.p99_ms && point.p99_ms > targets.p99_ms) ||
+              point.backlog_messages > 0;
+            return (
+              <div
+                key={point.second}
+                className={`min-w-2 flex-1 rounded-sm ${bad ? "bg-red-400/70" : "bg-emerald-400/60"}`}
+                style={{ height }}
+                title={`${point.second}s · ${Math.round(point.input_rps)} RPS · p99 ${Math.round(point.p99_ms)} ms · backlog ${Math.round(point.backlog_messages)}`}
+              />
+            );
+          })}
+        </div>
+        <span className="font-mono text-[9px] text-ink/30">60s</span>
       </div>
 
       {sim.tips.length > 0 && (

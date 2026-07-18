@@ -1,0 +1,107 @@
+{
+ "model": "qwen2.5:7b-instruct",
+ "stream": false,
+ "options": {
+  "temperature": 0
+ },
+ "format": {
+  "type": "object",
+  "required": [
+   "score",
+   "verdict",
+   "strengths",
+   "findings"
+  ],
+  "properties": {
+   "score": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 100
+   },
+   "verdict": {
+    "enum": [
+     "pass",
+     "borderline",
+     "fail"
+    ]
+   },
+   "strengths": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   },
+   "findings": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "severity",
+      "component_refs",
+      "basis",
+      "recommendation"
+     ],
+     "properties": {
+      "severity": {
+       "enum": [
+        "critical",
+        "warning",
+        "info"
+       ]
+      },
+      "component_refs": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "basis": {
+       "enum": [
+        "guideline",
+        "general"
+       ]
+      },
+      "citation": {
+       "anyOf": [
+        {
+         "type": "null"
+        },
+        {
+         "type": "object",
+         "required": [
+          "doc_id",
+          "section"
+         ],
+         "properties": {
+          "doc_id": {
+           "type": "string"
+          },
+          "section": {
+           "type": "string"
+          },
+          "excerpt": {
+           "type": "string"
+          }
+         }
+        }
+       ]
+      },
+      "recommendation": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  }
+ },
+ "messages": [
+  {
+   "role": "system",
+   "content": "Você é um comitê de arquitetura avaliando um diagrama de sistema.\nAvalie o diagrama nas três dimensões, fundamentado nos trechos de guidelines fornecidos:\n1. Confiabilidade e escala: gargalos, pontos únicos de falha, capacidade vs. NFRs,\n   uso de cache/filas, réplicas.\n2. Segurança e governança: classificação de dados, exposição externa, guardrails.\n3. Arquitetura GenAI: uso de gateway de LLM, cache semântico, guardrails de\n   entrada/saída, custo e latência de inferência.\n\nRegras de citação (obrigatórias): todo finding apoiado em guideline deve citar\ndoc_id + seção reais dos trechos fornecidos (basis=\"guideline\"); se nenhum\nguideline se aplica, basis=\"general\" e nenhuma citação. Nunca invente referência.\nResponda APENAS com JSON no schema fornecido."
+  },
+  {
+   "role": "user",
+   "content": "GUIDELINES RELEVANTES:\n[REL-005 > Regra]\nCaminhos de requisição com perfil de leitura dominante (acima de ~70% de leituras) DEVEM ter uma camada de cache antes do armazenamento primário. Leituras repetitivas não devem atingir o banco no caminho crítico.\n\n[REL-005 > Racional]\nArmazenamentos primários (SQL ou NoSQL) têm capacidade de leitura ordens de magnitude menor que caches em memória. Em sistemas read-heavy — feeds, catálogos, redirecionadores, timelines — o banco satura primeiro e vira o gargalo de p99.\n\n[REL-005 > Dimensionamento]\nA estratégia de invalidação (TTL curto, invalidação por evento ou write-through) deve ser explícita no desenho. Valide a taxa de hit esperada em simulação: caminhos com hit abaixo de 50% indicam chave de cache mal escolhida.\n\n[REL-007 > Regra]\nOperações de escrita que se propagam para múltiplos destinos (fan-out — ex.: atualizar as timelines de milhares de seguidores, notificar N consumidores) NÃO DEVEM ser executadas de forma síncrona na requisição do usuário. A requisição publica em uma fila ou stream e retorna; workers materializam o fan-out de forma assíncrona.\n\n[SEC-012 > Regra]\nTodo fluxo em que a resposta de um LLM alcança um usuário externo DEVE passar por um componente de guardrail de saída antes da entrega. O guardrail inspeciona a resposta contra as políticas de conteúdo e de vazamento de dados internos.\n\n[GENAI-001 > Regra]\nToda chamada a modelos de linguagem DEVE passar pelo gateway corporativo de LLM. Nenhum serviço acessa provedores de modelo diretamente; credenciais de provedor não residem em serviços de aplicação.\n\nDIAGRAMA (serialização canônica):\n{\n \"intake\": {\n  \"summary\": \"Encurtador de URLs interno com redirecionamento de baixa latência para campanhas de marketing.\",\n  \"functional_requirements\": [\n   \"Encurtar URL\",\n   \"Redirecionar via short-code\"\n  ],\n  \"considerations\": \"Sistema read-heavy, ~10 leituras por escrita.\",\n  \"data_classification\": \"interna\",\n  \"out_of_scope\": null\n },\n \"components\": [\n  {\n   \"id\": \"n-cli\",\n   \"name\": \"Cliente\",\n   \"subtitle\": null,\n   \"archetype\": \"client\",\n   \"replicas\": 1\n  },\n  {\n   \"id\": \"n-app\",\n   \"name\": \"Redirector\",\n   \"subtitle\": null,\n   \"archetype\": \"app-server\",\n   \"replicas\": 2\n  },\n  {\n   \"id\": \"n-db\",\n   \"name\": \"Banco de short-codes\",\n   \"subtitle\": null,\n   \"archetype\": \"sql-db\",\n   \"replicas\": 1\n  }\n ],\n \"connections\": [\n  {\n   \"from\": \"Cliente\",\n   \"intent\": \"request\",\n   \"to\": \"Redirector\"\n  },\n  {\n   \"from\": \"Redirector\",\n   \"intent\": \"request\",\n   \"to\": \"Banco de short-codes\"\n  }\n ],\n \"annotations\": [\n  {\n   \"text\": \"mapeia short-code → URL\",\n   \"anchored_to\": \"Banco de short-codes\"\n  }\n ],\n \"last_simulation\": {\n  \"params\": {\n   \"base_rps\": 200,\n   \"traffic_multiplier\": 3.0,\n   \"read_ratio\": 0.9,\n   \"cache_hit_rate\": 0.8\n  },\n  \"total_rps\": 600,\n  \"p99_ms\": 186.0,\n  \"error_rate\": 0.5,\n  \"availability_pct\": 50.0,\n  \"bottleneck\": \"Banco de short-codes\"\n }\n}"
+  }
+ ]
+}

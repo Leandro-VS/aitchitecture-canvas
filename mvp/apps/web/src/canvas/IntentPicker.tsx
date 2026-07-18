@@ -10,6 +10,8 @@ const DESCRIPTIONS: Record<Intent, string> = {
   ai_call: "chamada a modelo ou serviço de IA",
   validation: "checagem: auth, regra de negócio, guardrail",
   dead_letter: "encaminha somente mensagens que falharam para a DLQ",
+  telemetry: "envia observações fora do caminho crítico do usuário",
+  model_update: "publica ou promove um modelo no plano de controle",
 };
 
 /** Aberto ao conectar dois nós: toda edge tem um intent (M2/§5.5). */

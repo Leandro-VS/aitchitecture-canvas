@@ -1,14 +1,29 @@
-/** Tutorial progressivo: constrói o caminho mínimo, mede um problema real,
- * aplica um paliativo e só então introduz os padrões de cache, fila e DLQ. */
+/** Tutorial da ferramenta: o caso de timeline fornece dados para exercitar o
+ * canvas, mas cada etapa apresenta uma operação ou leitura do AIrchitecture. */
+
+import type { NodeMetrics, SimParams } from "../api/client";
 
 export type Condition =
-  | { kind: "node_added"; archetype: string }
+  | { kind: "node_added"; archetype: string; count?: number }
   | { kind: "node_replicas"; archetype: string; min: number }
+  | {
+      kind: "node_config";
+      archetype: string;
+      fields: Record<string, string | number>;
+      count?: number;
+    }
   | { kind: "edge_intent"; intent: string; count: number }
+  | {
+      kind: "edge_between";
+      sourceArchetype: string;
+      targetArchetype: string;
+      intent: string;
+    }
+  | { kind: "edge_absent"; sourceArchetype: string; targetArchetype: string }
   | { kind: "annotation_added" }
   | { kind: "context_filled" }
   | { kind: "simulation_ran" }
-  | { kind: "simulation_total_rps"; value: number }
+  | { kind: "simulation_scenario"; scenario: SimParams["scenario"] }
   | {
       kind: "simulation_setup";
       baseRps: number;
@@ -16,10 +31,24 @@ export type Condition =
       readRatio: number;
       cacheHitRate: number;
       p99Target: number;
+      scenario: SimParams["scenario"];
+      capacityProfile: SimParams["capacity_profile"];
     }
   | { kind: "simulation_bottleneck"; archetype: string }
   | { kind: "simulation_node_active"; archetype: string }
   | { kind: "simulation_no_errors" }
+  | {
+      kind: "simulation_node_metric";
+      archetype: string;
+      metric: keyof Pick<
+        NodeMetrics,
+        "attack_rps" | "blocked_rps" | "uninspected_rps" | "backlog_messages" | "cpu"
+      >;
+      operator: "gt" | "gte" | "lt" | "lte";
+      value: number;
+      nodeData?: Record<string, string | number>;
+    }
+  | { kind: "simulation_p99"; operator: "gt" | "lte"; value: number }
   | { kind: "architect_prompt"; prompt: string }
   | { kind: "diff_applied" }
   | { kind: "judge_completed" }
@@ -39,58 +68,78 @@ export const FANOUT_PROMPT = "Como escalo a escrita de tweets para milhões de s
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
   {
-    id: "intro",
+    id: "problem-briefing",
     kind: "info",
-    title: "Comece pelo caminho mais simples",
+    title: "O problema proposto",
     body:
-      "Vamos construir uma home timeline sem antecipar soluções. Primeiro ela precisa apenas permitir postar tweets e ler, em ordem cronológica, os tweets das pessoas seguidas.\n\n" +
-      "Depois vamos aumentar a carga, observar o que realmente quebra e evoluir o desenho a partir das medições.",
+      "CENÁRIO DE DEMONSTRAÇÃO\n" +
+      "Uma home timeline permite publicar tweets e ler, em ordem cronológica, as publicações das pessoas seguidas. O tráfego cresceu e a equipe precisa revisar o caminho de leitura e de escrita.",
+  },
+  {
+    id: "requirements-briefing",
+    kind: "info",
+    title: "Confira os critérios que a ferramenta vai medir",
+    body:
+      "FUNCIONAIS\n" +
+      "• Publicar tweets de até 280 caracteres.\n" +
+      "• Seguir e deixar de seguir usuários.\n" +
+      "• Exibir os tweets das pessoas seguidas em ordem cronológica.\n\n" +
+      "NÃO FUNCIONAIS\n" +
+      "• Avaliar 3.500 RPS, com 90% de leituras.\n" +
+      "• Manter p99 abaixo de 200 ms.\n" +
+      "• Responder à publicação rapidamente durante picos.\n" +
+      "• Aceitar consistência eventual no feed sem perder publicações.\n\n" +
+      "Esses dados serão registrados no Contexto e nos controles do simulador; não precisam virar texto dentro dos componentes.",
   },
   {
     id: "add-client",
     kind: "action",
-    title: "Adicione quem faz a requisição",
-    body: "Na palette à esquerda, clique em ‘+ Client (Web)’. Ele representa quem abre a timeline ou publica um tweet.",
+    title: "Use a palette para adicionar a origem",
+    body:
+      "Na palette Componentes, clique em ‘+ Client (Web)’ ou arraste-o para o canvas. Clique adiciona no centro; arrastar permite escolher a posição.",
     done_when: [{ kind: "node_added", archetype: "client" }],
   },
   {
     id: "add-app",
     kind: "action",
-    title: "Adicione a aplicação",
-    body: "Adicione um App Server. Ele recebe as requisições e monta a resposta da timeline. Você pode renomeá-lo para ‘Timeline API’ pelo botão ✎.",
+    title: "Adicione um componente de processamento",
+    body:
+      "Adicione um App Server. O botão ✎ abre suas propriedades: nome e subtítulo descrevem o papel; porte, escala e unidades alimentam o simulador. Renomear é opcional.",
     done_when: [{ kind: "node_added", archetype: "app-server" }],
   },
   {
     id: "add-db",
     kind: "action",
-    title: "Adicione o armazenamento",
-    body: "Adicione um NoSQL DB para guardar tweets e timelines. Por enquanto ele é apenas o armazenamento do caminho mínimo; ainda não estamos escolhendo sharding ou antecipando gargalos.",
+    title: "Complete o caminho mínimo com armazenamento",
+    body:
+      "Adicione um NoSQL DB. Neste momento ele representa apenas o armazenamento necessário para tornar o fluxo simulável.",
     done_when: [{ kind: "node_added", archetype: "nosql-db" }],
   },
   {
     id: "connect-base",
     kind: "action",
-    title: "Feche o primeiro caminho",
-    body: "Conecte Client → Timeline API e Timeline API → NoSQL DB. Escolha o intent ‘request’ nas duas conexões.",
+    title: "Conecte os nós e declare a intenção",
+    body:
+      "Arraste entre os handles para criar Client → App Server e App Server → NoSQL DB. No seletor de cada conexão, escolha ‘request’. O intent define como o motor propaga a carga; ele não é apenas um rótulo visual.",
     done_when: [{ kind: "edge_intent", intent: "request", count: 2 }],
   },
   {
     id: "context",
     kind: "action",
-    title: "Agora descreva o cenário de crescimento",
+    title: "Preencha o Contexto que acompanha o diagrama",
     body:
-      "Clique em ‘Contexto’ no topo e registre o problema. Você pode usar:\n\n" +
-      "Descrição:\nHome timeline do Twitter/X para postar tweets e ler os tweets das pessoas seguidas, com crescimento até centenas de milhões de usuários e leitura dominante.\n\n" +
-      "Requisitos (um por linha):\nPostar tweets de até 280 caracteres\nSeguir e deixar de seguir usuários\nCarregar a timeline em menos de 200 ms\n\n" +
-      "Considerações:\nO feed pode aceitar consistência eventual, mas a publicação deve responder rapidamente nos picos.",
+      "Abra ‘Contexto’ na borda esquerda. Os campos podem ser salvos parcialmente e serão usados pelo Ask AIrchitect, pelo Juiz e pelo pré-ADR. Para este exercício, registre:\n\n" +
+      "Descrição:\nHome timeline para publicar tweets e ler as publicações das pessoas seguidas.\n\n" +
+      "Requisitos (um por linha):\nPublicar tweets de até 280 caracteres\nSeguir e deixar de seguir usuários\nCarregar a timeline com p99 abaixo de 200 ms\n\n" +
+      "Considerações:\nO feed aceita consistência eventual, mas a publicação deve responder rapidamente.",
     done_when: [{ kind: "context_filled" }],
   },
   {
     id: "first-simulation",
     kind: "action",
-    title: "Aumente a carga e meça",
+    title: "Configure uma referência e execute a primeira janela",
     body:
-      "Abra ⚙ na barra de simulação, defina RPS base = 3500, multiplicador = 1,0, cache hit = 80% e p99 alvo = 200 ms. Ajuste Reads vs writes para 90% de leitura e clique Start. Esse é um recorte controlado do tráfego, não os 300M de usuários lançados diretamente no motor.",
+      "Na barra de simulação, selecione ‘Carga constante’, mantenha Traffic = 1× e clique em + para expandir a própria barra. Em Perfil de Capacidade, escolha ‘Balanceado’; defina RPS base = 3500, cache hit = 80% e p99 alvo = 200 ms. Ajuste Reads vs writes para 90% de leitura e clique ‘Simular’. A ferramenta avaliará uma janela determinística de 60 segundos.",
     done_when: [
       { kind: "simulation_ran" },
       {
@@ -100,49 +149,68 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         readRatio: 0.9,
         cacheHitRate: 0.8,
         p99Target: 200,
+        scenario: "steady",
+        capacityProfile: "nominal",
       },
-      { kind: "simulation_total_rps", value: 3500 },
-      { kind: "simulation_bottleneck", archetype: "app-server" },
     ],
   },
   {
-    id: "app-problem",
+    id: "read-first-result",
     kind: "info",
-    title: "A primeira limitação é a aplicação",
+    title: "Leia o resultado em três níveis",
     body:
-      "Observe o HUD e o nó em vermelho: com uma réplica, a Timeline API recebe 3500 RPS para uma capacidade de 1500. Ela é o maior gargalo desta rodada. O NoSQL também está acima da capacidade e o p99 passa de 200 ms, mas resolver o banco primeiro esconderia a limitação anterior.",
+      "1. O HUD resume pico de RPS, p99, erros, disponibilidade e gargalo.\n" +
+      "2. A linha do tempo mostra se o problema ocupou toda a janela ou apenas alguns intervalos.\n" +
+      "3. Cada nó mostra RPS recebido, utilização de pico e estado.\n\n" +
+      "Nesta rodada, o App Server médio, fixo e com uma unidade é o maior gargalo. O NoSQL também satura e o p99 ultrapassa o alvo. A capacidade exibida já considera o Perfil de Capacidade Balanceado e a mistura de leitura/escrita.",
   },
   {
     id: "scale-app",
     kind: "action",
-    title: "Aplique um paliativo na API",
+    title: "Distribua a carga e escale a aplicação",
     body:
-      "Use o botão + no App Server até chegar a 3 réplicas. Isso é escala horizontal da camada stateless. A simulação roda novamente e mostra onde a pressão foi parar.",
+      "Antes de criar mais unidades, represente como a carga será distribuída. Adicione um Load Balancer pela palette. Selecione a conexão Client → App Server e pressione Delete; depois conecte Client → Load Balancer e Load Balancer → App Server usando o intent ‘request’. Por fim, abra ✎ no App Server, mantenha Porte = Medium e Escala = Fixa e defina 3 unidades. A simulação roda novamente e o gargalo deve se mover para o NoSQL DB.",
     done_when: [
+      { kind: "node_added", archetype: "load-balancer" },
+      {
+        kind: "edge_between",
+        sourceArchetype: "client",
+        targetArchetype: "load-balancer",
+        intent: "request",
+      },
+      {
+        kind: "edge_between",
+        sourceArchetype: "load-balancer",
+        targetArchetype: "app-server",
+        intent: "request",
+      },
+      { kind: "edge_absent", sourceArchetype: "client", targetArchetype: "app-server" },
       { kind: "node_replicas", archetype: "app-server", min: 3 },
       { kind: "simulation_bottleneck", archetype: "nosql-db" },
     ],
   },
   {
-    id: "db-problem",
+    id: "read-second-result",
     kind: "info",
-    title: "O gargalo se moveu para o banco",
+    title: "Compare o novo resultado, não apenas a cor",
     body:
-      "Agora a API está abaixo da capacidade, mas o NoSQL recebe as 3500 operações por segundo e suporta 2000. No modelo atual, o p99 fica em torno de 205 ms — pouco acima do alvo — e o nó mostra erros de saturação. A medição, e não uma suposição, revelou o próximo problema.",
+      "O Load Balancer permanece saudável e torna explícita a distribuição entre as unidades do App Server. A aplicação agora possui mais capacidade efetiva, mas o HUD aponta o NoSQL porque ele continua recebendo todas as operações; seu nó mostra utilização acima de 100%, throttling e p99 acima do alvo. Essa comparação confirma que a mudança resolveu uma limitação e expôs a próxima.",
   },
   {
     id: "ask-cache",
     kind: "action",
-    title: "Peça uma solução para o caminho de leitura",
-    body: "Envie a pergunta sugerida. O Arquiteto recebe o contexto, o canvas e a última simulação, por isso consegue propor uma mudança ligada ao gargalo observado.",
+    title: "Use o Ask AIrchitect sobre o gargalo observado",
+    body:
+      "Envie a pergunta sugerida. O Ask AIrchitect recebe Contexto, canvas e última simulação; a resposta pode, portanto, propor uma alteração ligada ao estado que você acabou de medir.",
     suggested_prompt: CACHE_PROMPT,
     done_when: [{ kind: "architect_prompt", prompt: CACHE_PROMPT }],
   },
   {
     id: "apply-cache",
     kind: "action",
-    title: "Aplique o cache sugerido",
-    body: "A sugestão aparece tracejada no canvas. Clique em Apply no card do Ask AI para adicionar o Cache ligado por ‘cache_lookup’.",
+    title: "Revise a proposta tracejada e aplique o diff",
+    body:
+      "A sugestão aparece tracejada antes de alterar o diagrama. No card do Ask AIrchitect, clique Apply para materializar o Cache e a conexão ‘cache_lookup’.",
     done_when: [
       { kind: "node_added", archetype: "cache" },
       { kind: "edge_intent", intent: "cache_lookup", count: 1 },
@@ -151,32 +219,59 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "validate-cache",
     kind: "action",
-    title: "Valide a solução na simulação",
+    title: "Espere a simulação automática validar o diff",
     body:
-      "Com 80% de cache hit, leituras atingem o cache e somente misses mais escritas chegam ao NoSQL. Aguarde a re-simulação automática: os componentes devem ficar sem erros e o p99 abaixo de 200 ms.",
+      "Com cache hit de 80%, o motor envia leituras ao Cache e apenas misses mais escritas ao NoSQL. Confirme no HUD e nos nós que a rodada constante ficou sem erros e abaixo do alvo de p99.",
     done_when: [{ kind: "simulation_no_errors" }],
   },
   {
-    id: "write-problem",
-    kind: "info",
-    title: "A leitura melhorou; falta modelar a escrita",
+    id: "cold-cache-scenario",
+    kind: "action",
+    title: "Troque o cenário sem redesenhar a arquitetura",
     body:
-      "O cache resolveu a repetição de leituras, mas um tweet de uma conta com milhões de seguidores não pode atualizar todas as timelines dentro da requisição. Fazer esse fan-out de modo síncrono ligaria a latência do usuário ao número de seguidores.",
+      "No simulador, em Cenário, selecione agora ‘Cache frio’ e clique Simular. Os mesmos RPS e componentes serão avaliados, mas o cache começa vazio nos primeiros 20 segundos.",
+    done_when: [{ kind: "simulation_scenario", scenario: "cold_cache" }],
+  },
+  {
+    id: "read-timeline",
+    kind: "info",
+    title: "Use a linha do tempo para separar pico de estado permanente",
+    body:
+      "As primeiras barras ficam críticas enquanto as leituras ainda chegam ao armazenamento; depois, o cache aquecido reduz a pressão. O resultado global conserva o pior p99 e o pior erro da janela, enquanto cada barra mostra quando isso aconteceu. Esse é o motivo de uma simulação temporal não esconder a fase ruim na média.",
+  },
+  {
+    id: "restore-baseline",
+    kind: "action",
+    title: "Restaure a referência antes de continuar",
+    body:
+      "Volte o cenário para ‘Carga constante’ e clique Simular. Comparar mudanças contra a mesma referência evita atribuir ao diagrama um efeito causado apenas pelo cenário.",
+    done_when: [
+      { kind: "simulation_scenario", scenario: "steady" },
+      { kind: "simulation_no_errors" },
+    ],
+  },
+  {
+    id: "write-observation",
+    kind: "info",
+    title: "A publicação ainda possui um caminho crítico",
+    body:
+      "A leitura da timeline agora está protegida pelo cache, mas a publicação ainda tem outro problema. Se o App Server atualizar, dentro da requisição, a timeline de todos os seguidores, o tempo de resposta e a chance de falha passam a depender do número de seguidores do autor. Para retirar esse fan-out do caminho síncrono, o próximo experimento modelará a publicação com fila e processamento assíncrono.",
   },
   {
     id: "ask-fanout",
     kind: "action",
-    title: "Peça uma solução para o fan-out",
-    body: "Envie a segunda pergunta sugerida para tirar o trabalho pesado do caminho síncrono.",
+    title: "Solicite um segundo diff ao Ask AIrchitect",
+    body:
+      "Envie a pergunta sugerida para obter uma proposta que retire o processamento pesado do caminho síncrono.",
     suggested_prompt: FANOUT_PROMPT,
     done_when: [{ kind: "architect_prompt", prompt: FANOUT_PROMPT }],
   },
   {
     id: "apply-fanout",
     kind: "action",
-    title: "Aplique fila e worker",
+    title: "Aplique e inspecione os intents assíncronos",
     body:
-      "Clique em Apply. A Timeline API publica somente os 10% de escritas na fila; o worker consome e materializa as timelines no NoSQL. Leituras não são duplicadas no caminho de escrita.",
+      "Clique Apply. A proposta adiciona Message Queue e Worker ligados por ‘async_message’. Como há cache no mesmo fan-out, o motor envia ao ramo assíncrono somente os 10% de escritas.",
     done_when: [
       { kind: "node_added", archetype: "message-queue" },
       { kind: "node_added", archetype: "worker" },
@@ -184,17 +279,18 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     ],
   },
   {
-    id: "fanout-result",
+    id: "inspect-queue",
     kind: "info",
-    title: "O trabalho pesado saiu da requisição",
+    title: "Interprete fila e consumidor separadamente",
     body:
-      "No cenário de 3500 RPS e 90% de leitura, a fila e o worker principal recebem cerca de 350 operações por segundo, não 3500. O caminho síncrono termina na publicação da fila; a contrapartida é consistência eventual no feed.",
+      "No cenário de referência, fila e worker recebem cerca de 350 operações/s. O caminho de p99 termina no aceite da fila; o worker fica fora da latência síncrona. Se o consumidor não acompanhar, a fila mostrará backlog e o worker ficará limitado à sua capacidade — o motor não transforma mensagens ainda enfileiradas em erros fictícios no worker.",
   },
   {
     id: "add-dlq",
     kind: "action",
-    title: "Separe as falhas do fluxo principal",
-    body: "Adicione ‘Dead Letter Queue’ em Messaging e ‘DLQ Worker’ em Compute. Eles existem para mensagens que falharam após tentativas, não para repetir a escala da fila principal.",
+    title: "Adicione os componentes do caminho de falha",
+    body:
+      "Na categoria Messaging, adicione Dead Letter Queue; em Compute, adicione DLQ Worker. Eles receberão apenas mensagens que falharam, não uma cópia da carga principal.",
     done_when: [
       { kind: "node_added", archetype: "dead-letter-queue" },
       { kind: "node_added", archetype: "dlq-worker" },
@@ -203,9 +299,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "connect-dlq",
     kind: "action",
-    title: "Conecte somente o caminho de falha",
+    title: "Modele a falha com o intent correto",
     body:
-      "Conecte Fan-out worker → Dead Letter Queue com intent ‘dead_letter’. Depois conecte Dead Letter Queue → DLQ Worker com ‘async_message’. A re-simulação deve mostrar cerca de 1% do volume principal nesse ramo.",
+      "Conecte Worker → Dead Letter Queue com ‘dead_letter’ e Dead Letter Queue → DLQ Worker com ‘async_message’. A simulação deve mostrar aproximadamente 1% do fluxo principal nesse ramo, sem escalar a DLQ como a fila principal.",
     done_when: [
       { kind: "edge_intent", intent: "dead_letter", count: 1 },
       { kind: "edge_intent", intent: "async_message", count: 3 },
@@ -216,31 +312,32 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "annotate",
     kind: "action",
-    title: "Registre os trade-offs",
+    title: "Registre decisões diretamente no canvas",
     body:
-      "Adicione um Balão de comentário e registre algo como: ‘cache exige política de invalidação; fan-out é eventual; DLQ recebe apenas falhas’. Use qualquer uma das quatro arestas do balão para ancorá-lo a um componente.",
+      "Adicione um Balão de comentário e escreva, por exemplo: ‘cache exige invalidação; feed é eventual; DLQ recebe apenas falhas’. Os quatro handles permitem ancorar o comentário pelo lado mais conveniente. Para ajustar uma conexão, selecione a aresta e arraste as alças laranja exibidas em cada quebra de 90 graus; o texto pode ser movido separadamente. Um duplo clique em uma alça restaura o traçado automático.",
     done_when: [{ kind: "annotation_added" }],
   },
   {
     id: "judge",
     kind: "action",
-    title: "Rode o Juiz",
-    body: "Abra ‘AI Judge’ na borda direita e clique em ‘Rodar Juiz’. Os findings devem refletir o desenho final, a simulação e as regras do corpus.",
+    title: "Use o Juiz como revisão do estado atual",
+    body:
+      "Abra ‘AI Judge’ na borda direita e clique ‘Rodar Juiz’. Os findings consideram Contexto, diagrama, comentários, intents e última simulação.",
     done_when: [{ kind: "judge_completed" }],
   },
   {
     id: "export",
     kind: "action",
-    title: "Confira antes de gerar",
+    title: "Revise o artefato antes de efetivar a exportação",
     body:
-      "Clique em ‘Exportar’, revise as seções e escolha ‘Pré-visualizar pré-ADR’. A prévia não cria arquivo nem registro; a geração só acontece depois de uma confirmação explícita.",
+      "Clique ‘Exportar’, revise as seções e escolha ‘Pré-visualizar pré-ADR’. A prévia mostra o resultado sem criar arquivo ou registro.",
     done_when: [{ kind: "export_previewed" }],
   },
   {
     id: "done",
     kind: "info",
-    title: "Diagrama concluído",
+    title: "Você percorreu o fluxo principal da ferramenta",
     body:
-      "Você começou com o caminho mínimo, mediu dois gargalos na ordem em que apareceram, aplicou um paliativo, consultou a IA e validou cache, processamento assíncrono e DLQ com cargas coerentes. Sharding, réplicas do armazenamento e estratégias híbridas de fan-out são próximos experimentos — agora motivados por dados.",
+      "Você criou e conectou componentes, explicitou a distribuição de carga, editou capacidade, registrou contexto, configurou uma referência, leu HUD e timeline, comparou cenários, aplicou diffs do Ask AIrchitect, representou processamento assíncrono e falhas, executou o Juiz e abriu a prévia do pré-ADR. O mesmo fluxo pode agora ser repetido com outro problema e outros critérios.",
   },
 ];

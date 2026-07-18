@@ -1,10 +1,27 @@
 import { useEffect, useState } from "react";
 
 import { useCanvas } from "../canvas/store";
+import { tutorialOption, type TutorialId } from "./catalog";
+import { TUTORIAL_DEFINITIONS } from "./registry";
 import { useTutorialSignals } from "./signals";
-import { TUTORIAL_STEPS, type Condition } from "./steps";
+import type { Condition } from "./steps";
 
-const storageKey = (diagramId: string) => `blueprint-tutorial:${diagramId}`;
+// A versão muda quando passos são inseridos ou reordenados. Assim um progresso
+// salvo por índice nunca inicia o usuário no meio de uma narrativa diferente.
+const storageKey = (diagramId: string, tutorialId: TutorialId, version: number) =>
+  `blueprint-tutorial:${tutorialId}:v${version}:${diagramId}`;
+
+const matchesFields = (
+  data: Record<string, unknown>,
+  fields: Record<string, string | number> | undefined,
+) => !fields || Object.entries(fields).every(([key, value]) => data[key] === value);
+
+const compare = (actual: number, operator: "gt" | "gte" | "lt" | "lte", value: number) => {
+  if (operator === "gt") return actual > value;
+  if (operator === "gte") return actual >= value;
+  if (operator === "lt") return actual < value;
+  return actual <= value;
+};
 
 function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean): boolean {
   const nodes = useCanvas((s) => s.nodes);
@@ -17,9 +34,9 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
   return conditions.every((c) => {
     switch (c.kind) {
       case "node_added":
-        return nodes.some(
+        return nodes.filter(
           (n) => n.type === "arch" && !n.data.ghost && n.data.archetype === c.archetype,
-        );
+        ).length >= (c.count ?? 1);
       case "node_replicas":
         return nodes.some(
           (n) =>
@@ -28,27 +45,70 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
             n.data.archetype === c.archetype &&
             (n.data.replicas ?? 1) >= c.min,
         );
+      case "node_config":
+        return nodes.filter(
+          (n) =>
+            n.type === "arch" &&
+            !n.data.ghost &&
+            n.data.archetype === c.archetype &&
+            matchesFields(n.data, c.fields),
+        ).length >= (c.count ?? 1);
       case "edge_intent":
         return (
           edges.filter(
             (e) => (e.data as { intent?: string } | undefined)?.intent === c.intent,
           ).length >= c.count
         );
+      case "edge_between": {
+        const sourceIds = new Set(
+          nodes
+            .filter((node) => node.type === "arch" && node.data.archetype === c.sourceArchetype)
+            .map((node) => node.id),
+        );
+        const targetIds = new Set(
+          nodes
+            .filter((node) => node.type === "arch" && node.data.archetype === c.targetArchetype)
+            .map((node) => node.id),
+        );
+        return edges.some(
+          (edge) =>
+            sourceIds.has(edge.source) &&
+            targetIds.has(edge.target) &&
+            (edge.data as { intent?: string } | undefined)?.intent === c.intent,
+        );
+      }
+      case "edge_absent": {
+        const sourceIds = new Set(
+          nodes
+            .filter((node) => node.type === "arch" && node.data.archetype === c.sourceArchetype)
+            .map((node) => node.id),
+        );
+        const targetIds = new Set(
+          nodes
+            .filter((node) => node.type === "arch" && node.data.archetype === c.targetArchetype)
+            .map((node) => node.id),
+        );
+        return !edges.some(
+          (edge) => sourceIds.has(edge.source) && targetIds.has(edge.target),
+        );
+      }
       case "annotation_added":
         return nodes.some((n) => n.type === "annotation");
       case "context_filled":
         return hasIntake;
       case "simulation_ran":
         return sim !== null;
-      case "simulation_total_rps":
-        return sim?.total_rps === c.value;
+      case "simulation_scenario":
+        return sim?.scenario === c.scenario;
       case "simulation_setup":
         return (
           simParams.base_rps === c.baseRps &&
           simParams.traffic_multiplier === c.multiplier &&
           Math.abs(simParams.read_ratio - c.readRatio) < 0.001 &&
           Math.abs(simParams.cache_hit_rate - c.cacheHitRate) < 0.001 &&
-          simParams.p99_target_ms === c.p99Target
+          simParams.p99_target_ms === c.p99Target &&
+          simParams.scenario === c.scenario &&
+          simParams.capacity_profile === c.capacityProfile
         );
       case "simulation_bottleneck": {
         const bottleneck = nodes.find((node) => node.id === sim?.bottleneck);
@@ -62,6 +122,18 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
       }
       case "simulation_no_errors":
         return sim !== null && sim.error_rate <= 0.001;
+      case "simulation_node_metric":
+        return nodes.some((node) => {
+          if (
+            node.type !== "arch" ||
+            node.data.archetype !== c.archetype ||
+            !matchesFields(node.data, c.nodeData)
+          ) return false;
+          const value = sim?.nodes[node.id]?.[c.metric];
+          return typeof value === "number" && compare(value, c.operator, c.value);
+        });
+      case "simulation_p99":
+        return sim !== null && (c.operator === "gt" ? sim.p99_ms > c.value : sim.p99_ms <= c.value);
       case "architect_prompt":
         return signals.lastArchitectPrompt === c.prompt;
       case "diff_applied":
@@ -76,31 +148,35 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
 
 interface Props {
   diagramId: string;
+  tutorialId: TutorialId;
   hasIntake: boolean;
   onFinish: () => void;
 }
 
 /** Dock do tutorial (M14): passos declarativos com Voltar/Próximo; ações
  *  bloqueiam o avanço até a condição real acontecer. Progresso em localStorage. */
-export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
+export function TutorialOverlay({ diagramId, tutorialId, hasIntake, onFinish }: Props) {
+  const definition = TUTORIAL_DEFINITIONS[tutorialId];
+  const steps = definition.steps;
+  const key = storageKey(diagramId, tutorialId, definition.version);
   const [index, setIndex] = useState(() => {
-    const saved = Number(localStorage.getItem(storageKey(diagramId)));
-    return Number.isFinite(saved) ? Math.min(saved, TUTORIAL_STEPS.length - 1) : 0;
+    const saved = Number(localStorage.getItem(key));
+    return Number.isFinite(saved) ? Math.min(saved, steps.length - 1) : 0;
   });
   const [minimized, setMinimized] = useState(false);
   const suggestPrompt = useTutorialSignals((s) => s.suggestPrompt);
 
-  const step = TUTORIAL_STEPS[index];
+  const step = steps[index];
   const satisfied = useConditionMet(step.done_when, hasIntake);
   const blocked = step.kind === "action" && !satisfied;
-  const isLast = index === TUTORIAL_STEPS.length - 1;
+  const isLast = index === steps.length - 1;
 
   useEffect(() => {
-    localStorage.setItem(storageKey(diagramId), String(index));
-  }, [diagramId, index]);
+    localStorage.setItem(key, String(index));
+  }, [key, index]);
 
   const finish = () => {
-    localStorage.removeItem(storageKey(diagramId));
+    localStorage.removeItem(key);
     onFinish();
   };
 
@@ -116,7 +192,7 @@ export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
                    bg-panel px-4 py-1.5 shadow-xl"
       >
         <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-ink/50">
-          tutorial {index + 1}/{TUTORIAL_STEPS.length}
+          tutorial {index + 1}/{steps.length}
         </span>
         <span className="truncate text-xs text-ink/85">{step.title}</span>
         {step.kind === "action" && (
@@ -150,15 +226,15 @@ export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
       <div className="mx-auto flex max-w-4xl items-start gap-4">
         <div className="mt-0.5 shrink-0 text-center">
           <div className="font-mono text-[10px] uppercase tracking-widest text-ink/40">
-            tutorial
+            {tutorialOption(tutorialId).title}
           </div>
           <div className="font-mono text-xs text-ink/70">
-            {index + 1}/{TUTORIAL_STEPS.length}
+            {index + 1}/{steps.length}
           </div>
           <div className="mt-1 h-1 w-16 overflow-hidden rounded bg-white/10">
             <div
               className="h-full bg-primary transition-all"
-              style={{ width: `${((index + 1) / TUTORIAL_STEPS.length) * 100}%` }}
+              style={{ width: `${((index + 1) / steps.length) * 100}%` }}
             />
           </div>
         </div>
@@ -181,7 +257,7 @@ export function TutorialOverlay({ diagramId, hasIntake, onFinish }: Props) {
           </h3>
           {/* whitespace-pre-line preserva quebras/identação; select-text libera
               copiar/colar (o dock é select-none para os controles) */}
-          <p className="panel-scroll mt-0.5 max-h-40 cursor-text select-text overflow-y-auto
+          <p className="panel-scroll mt-0.5 max-h-64 cursor-text select-text overflow-y-auto
                         overscroll-contain whitespace-pre-line text-xs leading-relaxed
                         text-ink/70">
             {step.body}

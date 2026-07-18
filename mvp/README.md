@@ -8,7 +8,7 @@ Para otimizar o meu tempo e entregar soluções melhores, comecei a criar as arq
 O app propõe:
 
 - Canvas para System Design
-- Ask AI para tirar duvidas de arquitetura
+- Ask AIrchitect para tirar duvidas de arquitetura
 - Judge-Architect - para avaliar a arquitetura criada utilizando os Guides pré-definidos
 - Simulador Deterministico de carga - gargalos, latência, disponibilidade
 - Pré-ADR para agilizar o processo e discussões
@@ -104,9 +104,9 @@ Notas de dev:
   - Palette: **clique adiciona o componente ao canvas** (além do drag-and-drop)
   - Rails colapsáveis em abas verticais nas bordas (à direita: **AI Judges**,
     estilo da inspiração; à esquerda: contexto/problema)
-- [x] **Fase 5 — Arquiteto ("Ask AI") + bootstrap** (US4)
+- [x] **Fase 5 — Arquiteto ("Ask AIrchitect") + bootstrap** (US4)
   - Entrada do chat: **botão em balão de conversa no canto superior direito do
-    canvas, título "Ask AI"** — abre o chat do Arquiteto com contexto completo
+    canvas, título "Ask AIrchitect"** — abre o chat do Arquiteto com contexto completo
     (intake + canvas serializado + comentários + última simulação + RAG)
   - Ghost diff com Apply/Dismiss; bootstrap "Gerar esboço com IA" na criação
 - [x] **Fase 6 — Export MD + tutorial** (US6/US8)
@@ -116,7 +116,7 @@ Notas de dev:
     simulação e avaliação do Juiz com citações
   - Tutorial: Home → 🎓 Tutorial cria a sessão do encurtador de URL com dock
     de passos declarativos (`tutorial/steps.ts`); ações bloqueiam o Próximo
-    observando os stores; pergunta sugerida enviada ao Ask AI com 1 clique
+    observando os stores; pergunta sugerida enviada ao Ask AIrchitect com 1 clique
     (fixture específica por hash do prompt); progresso em localStorage
 
 Decisões de produto que divergem das specs originais: intake opcional na criação

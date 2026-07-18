@@ -9,7 +9,7 @@ Leia-o antes de qualquer mudança. Última atualização: 16/07/2026, fim do dia
 software com **IA dedicada na mesma tela**. Engenheiros desenham arquiteturas
 (tradicionais e GenAI) num playground React Flow e contam com:
 
-- **Arquiteto IA ("Ask AI")** — chat com contexto do desenho que responde
+- **Arquiteto IA ("Ask AIrchitect")** — chat com contexto do desenho que responde
   dúvidas e propõe mudanças estruturais como *ghost nodes* (Apply/Dismiss);
 - **Tutorial guiado** — dock de passos que percorre todo o produto com IA mockada;
 - **Juiz IA** — avalia o diagrama contra guidelines corporativos (RAG) com
@@ -62,7 +62,7 @@ Registradas em conversa com o Leandro (dono do projeto) — prevalecem sobre os 
   cheia com overlays flutuantes — barra de simulação no topo (Start/Traffic/
   Reads-vs-writes + ⚙), HUD de resultados embaixo, palette flutuante com
   clique-para-adicionar, aba vertical "AI Judge" na borda direita, balão
-  "Ask AI" no canto superior direito. **Contexto e Exportar são botões no
+  "Ask AIrchitect" no canto superior direito. **Contexto e Exportar são botões no
   header da sessão, lado a lado** (a antiga aba vertical de contexto à
   esquerda foi removida a pedido do Leandro).
 - **Identidade visual "bancada de trabalho"** (16/07): fundo verde de cutting
@@ -80,7 +80,7 @@ Registradas em conversa com o Leandro (dono do projeto) — prevalecem sobre os 
 - **Intents genéricos** (tradicional + IA): request, cache_lookup,
   async_message, retrieval, ai_call, validation. Legados (async_enqueue,
   llm_call, guardrail_check) seguem aceitos pelo motor em diagramas salvos.
-- **Painéis coordenados**: AI Judge aberto empurra Ask AI/Propriedades para a
+- **Painéis coordenados**: AI Judge aberto empurra Ask AIrchitect/Propriedades para a
   esquerda (offset 340px via prop shiftLeft); dock do tutorial ativo sobe o HUD
   (signals.active); painéis roláveis usam .panel-scroll (barra visível).
 - **Dock do tutorial**: seta ▾ no canto superior direito minimiza — minimizado
@@ -98,7 +98,7 @@ Registradas em conversa com o Leandro (dono do projeto) — prevalecem sobre os 
 - [x] Fase 3 — Corpus: parser do pacote §8.1, indexação no worker, busca com citação (M6)
 - [x] Fase 4 — Juiz único: fixtures, D15 no schema, cache por hash, painel de findings (US5)
 - [x] Fase 4.5 — Passe de UX do playground
-- [x] Fase 5 — Ask AI (chat SSE + ghost diff) e bootstrap por linguagem natural (US4/M13)
+- [x] Fase 5 — Ask AIrchitect (chat SSE + ghost diff) e bootstrap por linguagem natural (US4/M13)
 - [x] Fase 6 — Export pré-ADR (Jinja2 → MD+PNG no MinIO, rascunho IA editável)
   e tutorial guiado — **MVP completo**
 - [x] Refinamento pós-Fase 6 (16/07): tutorial redesenhado para o **feed do

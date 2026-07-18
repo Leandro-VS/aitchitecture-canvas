@@ -18,7 +18,8 @@ from ..judges.schemas import Citation
 # Intents genéricos: servem system design tradicional E sistemas com IA.
 # request=síncrona · cache_lookup=consulta cache · async_message=fila/evento ·
 # retrieval=busca em índice (search ou RAG) · ai_call=chamada a modelo/serviço
-# de IA · validation=checagem (auth, regra de negócio, guardrail)
+# de IA · validation=checagem (auth, regra de negócio, guardrail) ·
+# telemetry=observação fora do caminho crítico · model_update=plano de controle
 Intent = Literal[
     "request",
     "cache_lookup",
@@ -27,6 +28,8 @@ Intent = Literal[
     "retrieval",
     "ai_call",
     "validation",
+    "telemetry",
+    "model_update",
 ]
 
 MAX_SKETCH_NODES = 25

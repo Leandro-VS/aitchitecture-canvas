@@ -38,6 +38,108 @@ body {
   background-color: var(--color-bg);
 }
 
+/* O pulso de erro fica isolado no componente crítico. Usar o animate-pulse
+   genérico dentro da viewport transformada do React Flow podia promover o
+   conjunto de nós à mesma camada e suavizar também componentes saudáveis. */
+.sim-node-clear {
+  filter: none;
+  opacity: 1;
+}
+
+.sim-node-critical {
+  animation: sim-node-critical-pulse 1.6s ease-in-out infinite;
+  isolation: isolate;
+  will-change: opacity, box-shadow;
+}
+
+@keyframes sim-node-critical-pulse {
+  0%,
+  100% {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 0 0 rgba(239, 68, 68, 0);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 0 18px rgba(239, 68, 68, 0.45);
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-node-critical {
+    animation: none;
+  }
+}
+
+/* Home — a prévia reutiliza a paleta da mesa de corte sem competir com o canvas real. */
+.home-page {
+  isolation: isolate;
+}
+
+.home-preview {
+  box-shadow:
+    0 28px 80px rgba(3, 20, 16, 0.35),
+    0 0 0 1px rgba(232, 98, 44, 0.035);
+}
+
+.home-grid-small,
+.home-grid-large {
+  fill: none;
+}
+
+.home-grid-small {
+  stroke: rgba(238, 246, 241, 0.045);
+  stroke-width: 1;
+}
+
+.home-grid-large {
+  stroke: rgba(238, 246, 241, 0.09);
+  stroke-width: 1;
+}
+
+.home-flow path {
+  fill: none;
+  stroke: rgba(238, 246, 241, 0.5);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.home-flow .home-flow-async {
+  stroke: rgba(84, 211, 194, 0.7);
+  stroke-dasharray: 6 5;
+}
+
+.home-arrow-head {
+  fill: var(--color-primary);
+}
+
+.home-node rect {
+  fill: var(--color-card);
+  stroke: rgba(238, 246, 241, 0.22);
+  stroke-width: 1.5;
+}
+
+.home-node text {
+  fill: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.home-node .home-node-meta {
+  fill: rgba(238, 246, 241, 0.48);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 400;
+}
+
+.home-node-active rect {
+  filter: drop-shadow(0 0 10px rgba(232, 98, 44, 0.18));
+  stroke: var(--color-primary);
+  stroke-width: 2;
+}
+
 /* Painéis roláveis (AI Judge, chat): barra sempre visível — no macOS a barra
    overlay some e parece que o conteúdo não rola */
 .panel-scroll {

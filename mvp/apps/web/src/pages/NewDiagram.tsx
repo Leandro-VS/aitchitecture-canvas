@@ -148,7 +148,7 @@ export function NewDiagram() {
           </button>
           <p className="mt-4 text-xs leading-relaxed text-ink/50">
             Você pode desenhar e simular sem preencher mais nada. O contexto fica na aba
-            lateral da sessão — obrigatório para os recursos de IA (Ask AI e Juiz).
+            lateral da sessão — obrigatório para os recursos de IA (Ask AIrchitect e Juiz).
           </p>
         </form>
       )}
