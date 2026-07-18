@@ -25,6 +25,13 @@ WINDOW_SECONDS = 60
 SIZE_FACTORS = {"small": 0.5, "medium": 1.0, "large": 2.0}
 CAPACITY_FACTORS = {"conservative": 0.65, "nominal": 1.0, "optimistic": 1.5}
 HEALTH_RANK = {"ok": 0, "hot": 1, "critical": 2}
+GUARDRAIL_ENGINE_WORK = {"deterministic": 0.35, "ml": 1.0, "generative": 2.5}
+GUARDRAIL_ENGINE_LATENCY = {"deterministic": 0.35, "ml": 1.0, "generative": 8.0}
+GUARDRAIL_DETECTION = {
+    "deterministic": {"single": 1.0, "multi": 0.0},
+    "ml": {"single": 0.95, "multi": 0.85},
+    "generative": {"single": 1.0, "multi": 1.0},
+}
 
 Scenario = Literal[
     "steady", "spike", "ramp", "hot_partition", "cold_cache", "prompt_attack"
@@ -250,12 +257,15 @@ def _scenario_load(params: SimParams, bucket: int, bucket_count: int) -> float:
 def _guardrail_config(node: dict) -> tuple[str, str]:
     data = node.get("data", {})
     scope = data.get("guardrailScope", "current_turn")
-    failure_mode = data.get("guardrailFailureMode", "fail_closed")
+    default_engine = (
+        "generative" if data.get("archetype") == "output-guardrail" else "deterministic"
+    )
+    engine = data.get("guardrailEngine", default_engine)
     if scope not in {"current_turn", "recent_history"}:
         scope = "current_turn"
-    if failure_mode not in {"fail_closed", "fail_open"}:
-        failure_mode = "fail_closed"
-    return scope, failure_mode
+    if engine not in GUARDRAIL_ENGINE_WORK:
+        engine = default_engine
+    return scope, engine
 
 
 def _node_config(node: dict) -> tuple[NodeSize, ScalingPolicy, int, int]:
@@ -349,7 +359,8 @@ def simulate(
             + (1 - params.read_ratio) * profile.write_weight
         )
         if profile.key in {"input_guardrail", "output_guardrail"}:
-            scope, _ = _guardrail_config(node_by_id[nid])
+            scope, engine = _guardrail_config(node_by_id[nid])
+            factor *= GUARDRAIL_ENGINE_WORK[engine]
             if scope == "recent_history":
                 factor *= 1.6
         return factor
@@ -415,13 +426,20 @@ def simulate(
             forward_multi = multi_turn_attacks[nid]
 
             if profile.key in {"input_guardrail", "output_guardrail"} and inflow[nid] > 0:
-                scope, failure_mode = _guardrail_config(node_by_id[nid])
+                scope, engine = _guardrail_config(node_by_id[nid])
                 inspected_fraction = (
                     1.0 if capacity == INFINITE else min(1.0, capacity / inflow[nid])
                 )
-                detected_single = single_turn_attacks[nid] * inspected_fraction
+                detection = GUARDRAIL_DETECTION[engine]
+                detected_single = (
+                    single_turn_attacks[nid]
+                    * inspected_fraction
+                    * detection["single"]
+                )
                 detected_multi = (
-                    multi_turn_attacks[nid] * inspected_fraction
+                    multi_turn_attacks[nid]
+                    * inspected_fraction
+                    * detection["multi"]
                     if scope == "recent_history"
                     else 0.0
                 )
@@ -431,17 +449,14 @@ def simulate(
                 malicious_blocked = detected_single + detected_multi
                 forward_single -= detected_single
                 forward_multi -= detected_multi
-                if failure_mode == "fail_closed":
-                    benign_overflow = max(0.0, overflow - single_overflow - multi_overflow)
-                    guardrail_benign_errors[nid] = benign_overflow / inflow[nid]
-                    guardrail_blocked[nid] = malicious_blocked + overflow
-                    forward_rate -= malicious_blocked + overflow
-                    forward_single -= single_overflow
-                    forward_multi -= multi_overflow
-                else:
-                    guardrail_blocked[nid] = malicious_blocked
-                    guardrail_uninspected[nid] = overflow
-                    forward_rate -= malicious_blocked
+                # Guardrails operam sempre em fail closed: se a capacidade de
+                # inspeção acabar, o tráfego excedente não segue sem validação.
+                benign_overflow = max(0.0, overflow - single_overflow - multi_overflow)
+                guardrail_benign_errors[nid] = benign_overflow / inflow[nid]
+                guardrail_blocked[nid] = malicious_blocked + overflow
+                forward_rate -= malicious_blocked + overflow
+                forward_single -= single_overflow
+                forward_multi -= multi_overflow
                 forward_rate = max(0.0, forward_rate)
                 forward_single = max(0.0, forward_single)
                 forward_multi = max(0.0, forward_multi)
@@ -601,7 +616,8 @@ def simulate(
                 status = "steady"
             latency = spec(nid).base_latency_ms * _degradation_factor(utilization)
             if profile.key in {"input_guardrail", "output_guardrail"}:
-                scope, _ = _guardrail_config(node_by_id[nid])
+                scope, engine = _guardrail_config(node_by_id[nid])
+                latency *= GUARDRAIL_ENGINE_LATENCY[engine]
                 if scope == "recent_history":
                     latency *= 1.6
             if profile.key == "serverless_inference" and bucket == 0:
@@ -893,17 +909,6 @@ def _advisor_tips(result, node_by_id, out_edges, spec) -> list[AdvisorTip]:
                     message=(
                         f"{name} recebe chamadas sem Semantic Cache — respostas equivalentes "
                         "podem repetir custo e latência."
-                    ),
-                )
-            )
-        if metric.uninspected_rps > 0:
-            tips.append(
-                AdvisorTip(
-                    severity="warning",
-                    component_refs=[nid],
-                    message=(
-                        f"{name} deixou passar {metric.uninspected_rps:.0f} RPS sem inspeção "
-                        "por operar em fail open durante a saturação."
                     ),
                 )
             )

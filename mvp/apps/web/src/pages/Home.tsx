@@ -432,7 +432,7 @@ export function Home() {
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/60">
                   Os três casos percorrem o mesmo fluxo da ferramenta, mas exercitam componentes,
-                  cenários e decisões diferentes de uma entrevista de nível sênior.
+                  cenários e decisões diferentes para você conhecer seus principais recursos.
                 </p>
               </div>
               <button
@@ -476,12 +476,8 @@ export function Home() {
                     <p className="mt-2 text-xs leading-5 text-ink/60">{tutorial.summary}</p>
                     <dl className="mt-4 space-y-2 border-t border-white/8 pt-4 text-[11px]">
                       <div>
-                        <dt className="font-mono text-[8px] uppercase tracking-wider text-ink/35">Público</dt>
-                        <dd className="mt-0.5 text-ink/65">{tutorial.audience}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-mono text-[8px] uppercase tracking-wider text-ink/35">Nível</dt>
-                        <dd className="mt-0.5 text-ink/65">{tutorial.difficulty}</dd>
+                        <dt className="font-mono text-[8px] uppercase tracking-wider text-ink/35">Info</dt>
+                        <dd className="mt-0.5 text-ink/65">{tutorial.info}</dd>
                       </div>
                     </dl>
                     <div className="mt-4">

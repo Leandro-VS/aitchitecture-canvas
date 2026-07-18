@@ -36,6 +36,9 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
     : data.archetype === "output-guardrail"
       ? "saída"
       : null;
+  const guardrailEngine = data.guardrailEngine ?? (
+    data.archetype === "output-guardrail" ? "generative" : "deterministic"
+  );
 
   const border = data.ghost
     ? "border-dashed border-cyan-400/80"
@@ -97,9 +100,11 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
               : "interação"}
           </span>
           <span className="rounded bg-white/5 px-1 py-0.5 text-ink/55">
-            {(data.guardrailFailureMode ?? "fail_closed") === "fail_open"
-              ? "fail open"
-              : "fail closed"}
+            {guardrailEngine === "deterministic"
+              ? "determinístico"
+              : guardrailEngine === "ml"
+                ? "probabilístico"
+                : "generativo"}
           </span>
         </div>
       )}
@@ -167,21 +172,53 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
           erro {(sim.error_rate * 100).toFixed(1)}%
         </div>
       )}
+      {sim && sim.attack_rps > 0.01 && (
+        <div
+          className="mt-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-red-300"
+          title="tráfego adversarial que chegou a este componente"
+        >
+          ataque {Math.round(sim.attack_rps)} rps
+        </div>
+      )}
       {sim && sim.blocked_rps > 0.01 && (
         <div className="mt-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-primary">
           bloqueado {Math.round(sim.blocked_rps)} rps
         </div>
       )}
-      {sim && sim.uninspected_rps > 0.01 && (
-        <div className="mt-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-300">
-          sem inspeção {Math.round(sim.uninspected_rps)} rps
-        </div>
-      )}
-      {/* 4 pontos de conexão (connectionMode=loose: qualquer um conecta a qualquer um) */}
-      <Handle id="left" type="target" position={Position.Left} className="!bg-primary" />
-      <Handle id="top" type="target" position={Position.Top} className="!bg-primary" />
-      <Handle id="right" type="source" position={Position.Right} className="!bg-primary" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!bg-primary" />
+      {/* Handles legados continuam registrados para renderizar diagramas já salvos. */}
+      <Handle id="left" type="target" position={Position.Left}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="top" type="target" position={Position.Top}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="right" type="source" position={Position.Right}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="bottom" type="source" position={Position.Bottom}
+        className="!pointer-events-none !opacity-0" />
+      {/* Pares com os mesmos ids recuperam arestas gravadas por versões que
+          permitiam iniciar a conexão no tipo oposto do handle. */}
+      <Handle id="left" type="source" position={Position.Left}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="top" type="source" position={Position.Top}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="right" type="target" position={Position.Right}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="bottom" type="target" position={Position.Bottom}
+        className="!pointer-events-none !opacity-0" />
+
+      {/* Cada lado possui entrada e saída. A saída fica visível e recebe o gesto;
+          ao confirmar, o canvas associa o destino à entrada invisível equivalente. */}
+      <Handle id="left-target" type="target" position={Position.Left}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="top-target" type="target" position={Position.Top}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="right-target" type="target" position={Position.Right}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="bottom-target" type="target" position={Position.Bottom}
+        className="!pointer-events-none !opacity-0" />
+      <Handle id="left-source" type="source" position={Position.Left} className="!bg-primary" />
+      <Handle id="top-source" type="source" position={Position.Top} className="!bg-primary" />
+      <Handle id="right-source" type="source" position={Position.Right} className="!bg-primary" />
+      <Handle id="bottom-source" type="source" position={Position.Bottom} className="!bg-primary" />
     </div>
   );
 }

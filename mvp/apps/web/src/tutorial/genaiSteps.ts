@@ -47,7 +47,7 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     title: "Registre o contexto do exercício",
     body:
       "Abra Contexto e salve ao menos a descrição: ‘Assistente conversacional com respostas fundamentadas na base interna’. Você pode salvar parcialmente; o contexto acompanhará IA, Juiz e pré-ADR.",
-    done_when: [{ kind: "context_filled" }],
+    done_when: [{ kind: "context_description_saved" }],
   },
   {
     id: "baseline-simulation",
@@ -65,7 +65,7 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "info",
     title: "Observe quota e latência antes de otimizar",
     body:
-      "O LLM recebe uma chamada por pergunta e opera no limite nominal de uma unidade. O nó mostra sua utilização; o HUD inclui os 900 ms de referência no p99. Essa rodada é a base para medir economia de chamadas, não uma previsão de um modelo específico.",
+      "O LLM recebe uma chamada por pergunta e opera no limite nominal de uma unidade. Sua latência base é de 900ms, ao chegar a 100% da capacidade, sua latência degrada e o p99 do caminho ultrapassa os 2.500 ms configurados como alvo. O nó mostra essa utilização e o HUD compara o resultado observado com o alvo.",
   },
   {
     id: "semantic-cache",
@@ -114,15 +114,15 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Modele o caminho de recuperação",
     body:
-      "Adicione RAG Retriever, Embedding Service e Vector DB. Conecte App Server → RAG Retriever com retrieval, RAG Retriever → Embedding Service com ai_call e Embedding Service → Vector DB com retrieval. Conecte Vector DB → LLM Gateway com ai_call e remova a ligação direta App Server → LLM.",
+      "Adicione RAG Retriever, Embedding Service e Vector DB. Conecte App Server → RAG Retriever com retrieval. A partir do RAG Retriever, conecte Embedding Service com ai_call, Vector DB com retrieval e LLM Gateway com ai_call. Remova a ligação direta App Server → LLM. As arestas representam chamadas iniciadas pelo Retriever; as respostas são implícitas. Ele gera o embedding da pergunta, consulta o índice, monta o contexto recuperado e então chama o modelo.",
     done_when: [
       { kind: "node_added", archetype: "rag-retriever" },
       { kind: "node_added", archetype: "embedding-service" },
       { kind: "node_added", archetype: "vector-db" },
       { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "rag-retriever", intent: "retrieval" },
       { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "embedding-service", intent: "ai_call" },
-      { kind: "edge_between", sourceArchetype: "embedding-service", targetArchetype: "vector-db", intent: "retrieval" },
-      { kind: "edge_between", sourceArchetype: "vector-db", targetArchetype: "llm-gateway", intent: "ai_call" },
+      { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "vector-db", intent: "retrieval" },
+      { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "llm-gateway", intent: "ai_call" },
       { kind: "edge_absent", sourceArchetype: "app-server", targetArchetype: "llm-gateway" },
     ],
   },
@@ -149,10 +149,10 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Bloqueie ataques evidentes antes do LLM",
     body:
-      "Adicione Input Guardrail entre App Server e os ramos de cache/RAG: remova App Server → Semantic Cache e App Server → RAG Retriever; conecte App Server → Input Guardrail com validation e, a partir dele, conecte Semantic Cache com cache_lookup e RAG Retriever com retrieval. Nas propriedades, mantenha Interação atual e Fail closed. Simule.",
+      "Adicione Input Guardrail entre App Server e os ramos de cache/RAG: remova App Server → Semantic Cache e App Server → RAG Retriever; conecte App Server → Input Guardrail com validation e, a partir dele, conecte Semantic Cache com cache_lookup e RAG Retriever com retrieval. Nas propriedades, mantenha Estratégia = Determinístico e Interação atual. Esse primeiro filtro prioriza decisões previsíveis e baixa latência para bloquear ataques evidentes. Simule.",
     done_when: [
       { kind: "node_added", archetype: "guardrails" },
-      { kind: "node_config", archetype: "guardrails", fields: { guardrailScope: "current_turn", guardrailFailureMode: "fail_closed" } },
+      { kind: "node_config", archetype: "guardrails", fields: { guardrailEngine: "deterministic", guardrailScope: "current_turn" } },
       { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "guardrails", intent: "validation" },
       { kind: "edge_between", sourceArchetype: "guardrails", targetArchetype: "semantic-cache", intent: "cache_lookup" },
       { kind: "edge_between", sourceArchetype: "guardrails", targetArchetype: "rag-retriever", intent: "retrieval" },
@@ -164,18 +164,18 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "info",
     title: "Uma interação isolada não revela todo ataque",
     body:
-      "O primeiro guardrail remove os ataques evidentes e reduz chamadas ao LLM, mas o nó do modelo ainda recebe a parcela multi-turn. Detectá-la exige analisar o histórico — e pagar o custo dessa análise somente depois do filtro barato.",
+      "Guardrails podem usar três estratégias. A determinística prioriza previsibilidade e baixa latência. A probabilística amplia a cobertura, mas admite falsos positivos e negativos. A generativa considera mais nuances, com maior custo e latência. O primeiro filtro remove ataques evidentes; para a parcela multi-turn, usaremos a estratégia probabilística somente depois desse filtro barato.",
   },
   {
     id: "memory-history-guard",
     kind: "action",
     title: "Adicione memória e proteção multi-turn",
     body:
-      "Adicione Agent Memory e um segundo Input Guardrail. Remova as saídas do primeiro guardrail para cache/RAG; conecte primeiro Input Guardrail → Agent Memory com retrieval, Agent Memory → segundo Input Guardrail com validation e dele para Semantic Cache (cache_lookup) e RAG Retriever (retrieval). Abra as propriedades do segundo e escolha Histórico recente, mantendo Fail closed. Simule novamente.",
+      "Adicione Agent Memory e um segundo Input Guardrail. Remova as saídas do primeiro guardrail para cache/RAG; conecte primeiro Input Guardrail → Agent Memory com retrieval, Agent Memory → segundo Input Guardrail com validation e dele para Semantic Cache (cache_lookup) e RAG Retriever (retrieval). Abra as propriedades do segundo, escolha Estratégia = Probabilístico e Histórico recente. Simule novamente.",
     done_when: [
       { kind: "node_added", archetype: "agent-memory" },
       { kind: "node_added", archetype: "guardrails", count: 2 },
-      { kind: "node_config", archetype: "guardrails", fields: { guardrailScope: "recent_history", guardrailFailureMode: "fail_closed" } },
+      { kind: "node_config", archetype: "guardrails", fields: { guardrailEngine: "ml", guardrailScope: "recent_history" } },
       { kind: "edge_between", sourceArchetype: "agent-memory", targetArchetype: "guardrails", intent: "validation" },
     ],
   },
@@ -184,7 +184,7 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "info",
     title: "Leia o custo da defesa em camadas",
     body:
-      "O histórico recente tem menor capacidade efetiva e maior latência que a interação atual, mas bloqueia a tentativa multi-turn. Como o primeiro filtro já retirou ataques óbvios, memória e análise contextual recebem menos trabalho. Mensagens bloqueadas não devem ser persistidas no histórico; registre essa decisão no canvas.",
+      "A estratégia probabilística com histórico recente tem menor capacidade efetiva e maior latência que a determinística na interação atual, mas reconhece grande parte da tentativa multi-turn. Como o primeiro filtro já retirou ataques óbvios, memória e análise contextual recebem menos trabalho. O simulador representa a cobertura probabilística como ataque residual; em produção, você também precisaria medir falsos positivos e calibrar seus critérios. Mensagens bloqueadas não devem ser persistidas no histórico; registre essa decisão no canvas.",
   },
   {
     id: "ask-output",
@@ -204,10 +204,10 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Defina o contexto da validação de saída",
     body:
-      "Nas propriedades do Output Guardrail escolha Histórico recente e Fail closed, depois simule. Ele avalia a pergunta original, a resposta e os turnos anteriores. Note que o LLM já foi chamado: proteção de saída reduz exposição, não custo de geração.",
+      "Nas propriedades do Output Guardrail escolha Estratégia = Generativo e Histórico recente, depois simule. Ele avalia a pergunta original, a resposta e os turnos anteriores com maior sensibilidade ao contexto. Note que o modelo conversacional já foi chamado: proteção de saída reduz exposição, não seu custo de geração.",
     done_when: [
-      { kind: "node_config", archetype: "output-guardrail", fields: { guardrailScope: "recent_history", guardrailFailureMode: "fail_closed" } },
-      { kind: "simulation_node_metric", archetype: "output-guardrail", metric: "blocked_rps", operator: "gt", value: 0 },
+      { kind: "node_config", archetype: "output-guardrail", fields: { guardrailEngine: "generative", guardrailScope: "recent_history" } },
+      { kind: "simulation_node_active", archetype: "output-guardrail" },
     ],
   },
   {
@@ -234,7 +234,7 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Registre a política operacional",
     body:
-      "Adicione um comentário com as decisões: bloqueios não entram na memória; entrada usa filtro barato antes do histórico; saída é bloqueante; fail closed protege por padrão. Comentários também entram no Juiz e no pré-ADR.",
+      "Adicione um comentário com as decisões: bloqueios não entram na memória; entrada usa filtro barato antes do histórico; saída é bloqueante; saturação dos guardrails também bloqueia o excesso. Comentários também entram no Juiz e no pré-ADR.",
     done_when: [{ kind: "annotation_added" }],
   },
   {

@@ -42,11 +42,13 @@ function nodeDefaults(archetype: Archetype) {
       : archetype.params.default_guardrail_scope === "current_turn"
         ? "current_turn" as const
         : undefined,
-    guardrailFailureMode: archetype.params.default_guardrail_failure_mode === "fail_open"
-      ? "fail_open" as const
-      : archetype.params.default_guardrail_failure_mode === "fail_closed"
-        ? "fail_closed" as const
-        : undefined,
+    guardrailEngine: archetype.params.default_guardrail_engine === "generative"
+      ? "generative" as const
+      : archetype.params.default_guardrail_engine === "ml"
+        ? "ml" as const
+        : archetype.params.default_guardrail_engine === "deterministic"
+          ? "deterministic" as const
+          : undefined,
   };
 }
 
@@ -268,9 +270,17 @@ export function Palette() {
               atraso de reação do perfil.
             </p>
             <p className="mt-2">
-              Guardrails também oferecem Contexto analisado e política de falha. Histórico recente
-              detecta ataques multi-turn com maior custo; fail closed bloqueia quando não consegue
-              inspecionar, enquanto fail open deixa passar e sinaliza esse tráfego.
+              Guardrails também oferecem Estratégia e Contexto analisado. A
+              estratégia determinística prioriza previsibilidade, alta capacidade e baixa latência;
+              a probabilística amplia a cobertura, mas pode produzir falsos positivos e negativos;
+              a generativa considera mais nuances, com maior custo e latência. O componente representa
+              esse comportamento sem impor uma tecnologia ou infraestrutura específica.
+            </p>
+            <p className="mt-2">
+              Interação atual inspeciona apenas o turno em curso. Histórico recente permite detectar
+              ataques multi-turn, mas aumenta o trabalho de qualquer estratégia. Guardrails operam
+              sempre em fail closed: se não houver capacidade para inspecionar, o tráfego excedente
+              é bloqueado.
             </p>
           </section>
 
@@ -282,7 +292,7 @@ export function Palette() {
               <li><strong className="font-medium text-ink/80">Hot/Throttle</strong>: proximidade ou excesso de capacidade.</li>
               <li><strong className="font-medium text-ink/80">Backlog</strong>: mensagens aguardando consumidores.</li>
               <li><strong className="font-medium text-ink/80">Unidades ativas</strong>: resultado da escala elástica.</li>
-              <li><strong className="font-medium text-ink/80">Bloqueado / sem inspeção</strong>: decisões e lacunas dos guardrails.</li>
+              <li><strong className="font-medium text-ink/80">Bloqueado</strong>: ataques detectados e excesso que não pôde ser inspecionado.</li>
             </ul>
           </section>
 

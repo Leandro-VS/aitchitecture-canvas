@@ -108,6 +108,23 @@ export function PropertiesCard() {
                     : "A resposta já consumiu o LLM; este estágio decide se ela pode ser entregue."}
                 </p>
                 <div>
+                  <label className={label} htmlFor="p-guardrail-engine">Estratégia</label>
+                  <select
+                    id="p-guardrail-engine"
+                    className={field}
+                    value={node.data.guardrailEngine ?? (
+                      selectedArchetype?.archetype_class === "output-guardrail"
+                        ? "generative"
+                        : "deterministic"
+                    )}
+                    onChange={(e) => updateNodeData(node.id, { guardrailEngine: e.target.value })}
+                  >
+                    <option value="deterministic">Determinístico</option>
+                    <option value="ml">Probabilístico</option>
+                    <option value="generative">Generativo</option>
+                  </select>
+                </div>
+                <div>
                   <label className={label} htmlFor="p-guardrail-scope">Contexto analisado</label>
                   <select
                     id="p-guardrail-scope"
@@ -119,24 +136,12 @@ export function PropertiesCard() {
                     <option value="recent_history">Histórico recente</option>
                   </select>
                 </div>
-                <div>
-                  <label className={label} htmlFor="p-guardrail-failure">Falha ou saturação</label>
-                  <select
-                    id="p-guardrail-failure"
-                    className={field}
-                    value={node.data.guardrailFailureMode ?? "fail_closed"}
-                    onChange={(e) => updateNodeData(node.id, {
-                      guardrailFailureMode: e.target.value,
-                    })}
-                  >
-                    <option value="fail_closed">Fail closed · bloqueia</option>
-                    <option value="fail_open">Fail open · deixa passar</option>
-                  </select>
-                </div>
                 <p className="text-[10px] leading-relaxed text-ink/40">
-                  O histórico recente detecta ataques multi-turn, mas consome mais capacidade e
-                  adiciona latência. Fail closed protege por padrão; fail open preserva
-                  disponibilidade e sinaliza tráfego não inspecionado.
+                  A estratégia determinística prioriza previsibilidade e baixa latência. A
+                  probabilística amplia a cobertura, mas pode produzir falsos positivos e negativos.
+                  A generativa considera mais nuances, com maior custo e latência. O histórico recente
+                  também consome mais capacidade. Se a inspeção saturar, o guardrail bloqueia o
+                  excesso por operar sempre em fail closed.
                 </p>
               </div>
             )}

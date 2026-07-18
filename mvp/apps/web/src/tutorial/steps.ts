@@ -22,6 +22,7 @@ export type Condition =
   | { kind: "edge_absent"; sourceArchetype: string; targetArchetype: string }
   | { kind: "annotation_added" }
   | { kind: "context_filled" }
+  | { kind: "context_description_saved" }
   | { kind: "simulation_ran" }
   | { kind: "simulation_scenario"; scenario: SimParams["scenario"] }
   | {

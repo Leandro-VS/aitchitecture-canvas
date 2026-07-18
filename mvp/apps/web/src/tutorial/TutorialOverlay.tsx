@@ -14,7 +14,18 @@ const storageKey = (diagramId: string, tutorialId: TutorialId, version: number) 
 const matchesFields = (
   data: Record<string, unknown>,
   fields: Record<string, string | number> | undefined,
-) => !fields || Object.entries(fields).every(([key, value]) => data[key] === value);
+) => !fields || Object.entries(fields).every(([key, value]) => {
+  const effectiveValue = data[key] ?? (
+    key === "guardrailScope"
+      ? "current_turn"
+      : key === "guardrailEngine"
+        ? data.archetype === "output-guardrail"
+          ? "generative"
+          : "deterministic"
+        : undefined
+  );
+  return effectiveValue === value;
+});
 
 const compare = (actual: number, operator: "gt" | "gte" | "lt" | "lte", value: number) => {
   if (operator === "gt") return actual > value;
@@ -23,7 +34,11 @@ const compare = (actual: number, operator: "gt" | "gte" | "lt" | "lte", value: n
   return actual <= value;
 };
 
-function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean): boolean {
+function useConditionMet(
+  conditions: Condition[] | undefined,
+  hasIntake: boolean,
+  hasContextDescription: boolean,
+): boolean {
   const nodes = useCanvas((s) => s.nodes);
   const edges = useCanvas((s) => s.edges);
   const sim = useCanvas((s) => s.sim);
@@ -96,6 +111,8 @@ function useConditionMet(conditions: Condition[] | undefined, hasIntake: boolean
         return nodes.some((n) => n.type === "annotation");
       case "context_filled":
         return hasIntake;
+      case "context_description_saved":
+        return hasContextDescription;
       case "simulation_ran":
         return sim !== null;
       case "simulation_scenario":
@@ -150,12 +167,19 @@ interface Props {
   diagramId: string;
   tutorialId: TutorialId;
   hasIntake: boolean;
+  hasContextDescription: boolean;
   onFinish: () => void;
 }
 
 /** Dock do tutorial (M14): passos declarativos com Voltar/Próximo; ações
  *  bloqueiam o avanço até a condição real acontecer. Progresso em localStorage. */
-export function TutorialOverlay({ diagramId, tutorialId, hasIntake, onFinish }: Props) {
+export function TutorialOverlay({
+  diagramId,
+  tutorialId,
+  hasIntake,
+  hasContextDescription,
+  onFinish,
+}: Props) {
   const definition = TUTORIAL_DEFINITIONS[tutorialId];
   const steps = definition.steps;
   const key = storageKey(diagramId, tutorialId, definition.version);
@@ -167,7 +191,7 @@ export function TutorialOverlay({ diagramId, tutorialId, hasIntake, onFinish }: 
   const suggestPrompt = useTutorialSignals((s) => s.suggestPrompt);
 
   const step = steps[index];
-  const satisfied = useConditionMet(step.done_when, hasIntake);
+  const satisfied = useConditionMet(step.done_when, hasIntake, hasContextDescription);
   const blocked = step.kind === "action" && !satisfied;
   const isLast = index === steps.length - 1;
 

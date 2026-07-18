@@ -64,7 +64,7 @@ const SCENARIOS = [
     icon: "!",
     summary: "Mistura tráfego legítimo com ataques single-turn e multi-turn.",
     impact:
-      "Injeta 20% de ataques evidentes na interação atual e 10% distribuídos no histórico recente. Torna visível onde cada guardrail bloqueia, o que ainda chega ao LLM e o que passa sem inspeção.",
+      "Injeta 20% de ataques evidentes na interação atual e 10% distribuídos no histórico recente. Torna visível onde cada guardrail bloqueia, o que ainda chega ao LLM e quando a saturação bloqueia tráfego que não pôde ser inspecionado.",
   },
 ] as const;
 
@@ -519,11 +519,20 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
               Em IA generativa, <strong className="font-medium text-ink/80">Input Guardrail</strong>
               bloqueia antes do modelo e reduz suas chamadas; <strong className="font-medium text-ink/80">Output
               Guardrail</strong> avalia pergunta e resposta depois da geração, portanto não recupera o
-              custo do LLM. O escopo Interação atual detecta ataques evidentes; Histórico recente
-              também alcança tentativas multi-turn, com maior custo e latência. Em saturação, Fail
-              closed bloqueia inclusive tráfego legítimo que não pôde ser inspecionado, enquanto
-              Fail open o deixa passar e o marca como não inspecionado. Bloquear um ataque detectado
-              é uma decisão de segurança, não um erro de disponibilidade.
+              custo do LLM. Cada um pode usar três estratégias: <strong className="font-medium
+              text-ink/80">Determinístico</strong> prioriza previsibilidade, alta capacidade e baixa
+              latência; <strong className="font-medium text-ink/80">Probabilístico</strong> amplia a
+              cobertura, mas admite falsos positivos e negativos; <strong className="font-medium
+              text-ink/80">Generativo</strong> considera mais nuances, com menor capacidade e maior
+              latência. O simulador representa essas diferenças sem vincular o componente a uma
+              tecnologia ou infraestrutura específica.
+            </p>
+            <p className="mt-2">
+              O escopo Interação atual considera apenas o turno em curso; Histórico recente também
+              alcança tentativas multi-turn e aumenta o trabalho e a latência da estratégia escolhida.
+              Guardrails operam sempre em fail closed: na saturação, bloqueiam inclusive tráfego
+              legítimo que não pôde ser inspecionado. Bloquear um ataque detectado é uma decisão de
+              segurança; bloquear tráfego legítimo por falta de capacidade afeta a disponibilidade.
             </p>
           </section>
 

@@ -446,27 +446,62 @@ def test_input_guardrail_blocks_single_turn_before_the_llm_but_not_multi_turn():
     assert result.availability_pct == 100
 
 
-def test_history_guardrail_catches_multi_turn_and_costs_more_than_current_turn():
+def test_guardrail_engines_trade_capacity_latency_and_detection_coverage():
     current = canvas(
         [node("client", "client"), node("guard", "guardrails"), node("llm", "llm-gateway")],
         [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
     )
-    history = canvas(
+    ml_history = canvas(
         [
             node("client", "client"),
-            node("guard", "guardrails", guardrailScope="recent_history"),
+            node(
+                "guard",
+                "guardrails",
+                guardrailEngine="ml",
+                guardrailScope="recent_history",
+            ),
+            node("llm", "llm-gateway"),
+        ],
+        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+    )
+    generative_history = canvas(
+        [
+            node("client", "client"),
+            node(
+                "guard",
+                "guardrails",
+                guardrailEngine="generative",
+                guardrailScope="recent_history",
+            ),
             node("llm", "llm-gateway"),
         ],
         [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
     )
 
     current_result = simulate(current, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
-    history_result = simulate(history, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+    ml_result = simulate(ml_history, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
+    generative_result = simulate(
+        generative_history,
+        SimParams(base_rps=100, scenario="prompt_attack"),
+        SPECS,
+    )
 
-    assert history_result.nodes["guard"].blocked_rps == 30
-    assert history_result.nodes["llm"].attack_rps == 0
-    assert history_result.nodes["guard"].capacity_rps < current_result.nodes["guard"].capacity_rps
-    assert history_result.nodes["guard"].latency_ms > current_result.nodes["guard"].latency_ms
+    assert current_result.nodes["guard"].blocked_rps == 20
+    assert ml_result.nodes["guard"].blocked_rps == 27.5
+    assert generative_result.nodes["guard"].blocked_rps == 30
+    assert current_result.nodes["llm"].attack_rps == 10
+    assert ml_result.nodes["llm"].attack_rps == 2.5
+    assert generative_result.nodes["llm"].attack_rps == 0
+    assert (
+        current_result.nodes["guard"].capacity_rps
+        > ml_result.nodes["guard"].capacity_rps
+        > generative_result.nodes["guard"].capacity_rps
+    )
+    assert (
+        current_result.nodes["guard"].latency_ms
+        < ml_result.nodes["guard"].latency_ms
+        < generative_result.nodes["guard"].latency_ms
+    )
 
 
 def test_output_guardrail_filters_after_the_llm_without_saving_model_calls():
@@ -485,15 +520,24 @@ def test_output_guardrail_filters_after_the_llm_without_saving_model_calls():
     assert result.nodes["output"].blocked_rps == 30
 
 
-def test_guardrail_failure_modes_separate_availability_from_uninspected_traffic():
+def test_guardrail_always_fails_closed_even_for_legacy_fail_open_nodes():
     closed = canvas(
-        [node("client", "client"), node("guard", "guardrails"), node("llm", "llm-gateway")],
-        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
-    )
-    opened = canvas(
         [
             node("client", "client"),
-            node("guard", "guardrails", guardrailFailureMode="fail_open"),
+            node("guard", "guardrails", guardrailEngine="ml"),
+            node("llm", "llm-gateway"),
+        ],
+        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+    )
+    legacy = canvas(
+        [
+            node("client", "client"),
+            node(
+                "guard",
+                "guardrails",
+                guardrailEngine="ml",
+                guardrailFailureMode="fail_open",
+            ),
             node("llm", "llm-gateway"),
         ],
         [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
@@ -501,12 +545,13 @@ def test_guardrail_failure_modes_separate_availability_from_uninspected_traffic(
     params = SimParams(base_rps=2_000, scenario="prompt_attack")
 
     closed_result = simulate(closed, params, SPECS)
-    opened_result = simulate(opened, params, SPECS)
+    legacy_result = simulate(legacy, params, SPECS)
 
     assert closed_result.availability_pct < 100
     assert closed_result.nodes["guard"].uninspected_rps == 0
-    assert opened_result.nodes["guard"].uninspected_rps > 0
-    assert opened_result.nodes["guard"].error_rate == 0
+    assert legacy_result.nodes["guard"].uninspected_rps == 0
+    assert legacy_result.nodes["guard"].blocked_rps == closed_result.nodes["guard"].blocked_rps
+    assert legacy_result.nodes["guard"].error_rate == closed_result.nodes["guard"].error_rate
 
 
 def test_telemetry_and_model_updates_do_not_extend_the_online_path():
@@ -538,7 +583,12 @@ def test_conversational_tutorial_layered_guardrails_match_the_story():
             node("app", "app-server"),
             node("early", "guardrails"),
             node("memory", "agent-memory"),
-            node("history", "guardrails", guardrailScope="recent_history"),
+            node(
+                "history",
+                "guardrails",
+                guardrailEngine="ml",
+                guardrailScope="recent_history",
+            ),
             node("cache", "semantic-cache"),
             node("rag", "rag-retriever"),
             node("embedding", "embedding-service"),
@@ -555,8 +605,8 @@ def test_conversational_tutorial_layered_guardrails_match_the_story():
             edge("history", "cache", "cache_lookup"),
             edge("history", "rag", "retrieval"),
             edge("rag", "embedding", "ai_call"),
-            edge("embedding", "vectors", "retrieval"),
-            edge("vectors", "llm", "ai_call"),
+            edge("rag", "vectors", "retrieval"),
+            edge("rag", "llm", "ai_call"),
             edge("llm", "output", "validation"),
             edge("llm", "observe", "telemetry"),
         ],
@@ -575,9 +625,9 @@ def test_conversational_tutorial_layered_guardrails_match_the_story():
     )
 
     assert result.nodes["early"].blocked_rps == 20
-    assert result.nodes["history"].blocked_rps == 10
-    assert result.nodes["llm"].attack_rps == 0
-    assert result.nodes["llm"].rps == 21
+    assert result.nodes["history"].blocked_rps == 8.5
+    assert result.nodes["llm"].attack_rps == 0.45
+    assert result.nodes["llm"].rps == 21.45
     assert result.nodes["output"].blocked_rps > 0
     assert result.nodes["observe"].rps == result.nodes["llm"].rps
     assert result.availability_pct == 100

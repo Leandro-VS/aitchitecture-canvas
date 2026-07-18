@@ -4,9 +4,8 @@ export interface TutorialOption {
   id: TutorialId;
   title: string;
   diagramTitle: string;
-  audience: string;
+  info: string;
   duration: string;
-  difficulty: string;
   summary: string;
   components: string[];
   scenarios: string[];
@@ -17,9 +16,8 @@ export const TUTORIAL_OPTIONS: TutorialOption[] = [
     id: "social-feed",
     title: "Feed social sob carga",
     diagramTitle: "Tutorial — Feed social sob carga",
-    audience: "Backend e sistemas distribuídos",
+    info: "Backend e sistemas distribuídos",
     duration: "25–35 min",
-    difficulty: "Sênior",
     summary:
       "Evolua um feed mínimo com balanceamento, cache, fan-out assíncrono e tratamento de falhas.",
     components: ["Load Balancer", "NoSQL", "Cache", "Queue", "Worker", "DLQ"],
@@ -29,9 +27,8 @@ export const TUTORIAL_OPTIONS: TutorialOption[] = [
     id: "conversational-rag",
     title: "Assistente Conversacional com RAG",
     diagramTitle: "Tutorial — Assistente Conversacional com RAG",
-    audience: "GenAI, plataforma e segurança",
+    info: "GenAI, plataforma e segurança",
     duration: "30–40 min",
-    difficulty: "Sênior",
     summary:
       "Construa um assistente com cache semântico, recuperação, memória e guardrails em camadas.",
     components: ["LLM", "Semantic Cache", "RAG", "Vector DB", "Memory", "Guardrails"],
@@ -41,9 +38,8 @@ export const TUTORIAL_OPTIONS: TutorialOption[] = [
     id: "realtime-fraud",
     title: "Antifraude de pagamentos em tempo real",
     diagramTitle: "Tutorial — Antifraude de pagamentos em tempo real",
-    audience: "ML Engineering e sistemas críticos",
+    info: "ML Engineering e sistemas críticos",
     duration: "25–35 min",
-    difficulty: "Sênior",
     summary:
       "Modele decisão online, features, inferência, auditoria assíncrona e ciclo de atualização do modelo.",
     components: ["API Gateway", "Feature Store", "Real-time Inference", "Event Stream", "Monitoring"],

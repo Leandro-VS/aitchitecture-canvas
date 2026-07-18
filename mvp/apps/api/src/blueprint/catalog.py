@@ -104,14 +104,14 @@ CATALOG: list[dict] = [
      "base_latency_ms": 20, "params": {
          "simulation_profile": "input_guardrail",
          "default_guardrail_scope": "current_turn",
-         "default_guardrail_failure_mode": "fail_closed",
+         "default_guardrail_engine": "deterministic",
      }},
     {"archetype": "output-guardrail", "archetype_class": "output-guardrail",
      "label": "Output Guardrail", "category": "AI & Agents", "base_rps": 900,
      "base_latency_ms": 60, "params": {
          "simulation_profile": "output_guardrail",
          "default_guardrail_scope": "current_turn",
-         "default_guardrail_failure_mode": "fail_closed",
+         "default_guardrail_engine": "generative",
      }},
     {"archetype": "semantic-cache", "archetype_class": "semantic-cache", "label": "Semantic Cache",
      "category": "AI & Agents", "base_rps": 5_000, "base_latency_ms": 8},

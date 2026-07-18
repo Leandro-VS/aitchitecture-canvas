@@ -7,6 +7,7 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   useReactFlow,
   type Edge,
 } from "@xyflow/react";
@@ -48,9 +49,15 @@ function Canvas() {
   const addFromPalette = useCanvas((s) => s.addFromPalette);
   const addAnnotation = useCanvas((s) => s.addAnnotation);
   const setEditingNode = useCanvas((s) => s.setEditingNode);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const { screenToFlowPosition } = useReactFlow();
+  const connectionOrigin = useRef<{ nodeId: string | null; handleId: string | null }>({
+    nodeId: null,
+    handleId: null,
+  });
 
   return (
+    <>
     <ReactFlow
       nodes={nodes}
       edges={edges}
@@ -58,7 +65,50 @@ function Canvas() {
       edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
+      onConnectStart={(_, params) => {
+        connectionOrigin.current = {
+          nodeId: params.nodeId,
+          handleId: params.handleId,
+        };
+      }}
+      onConnect={(connection) => {
+        const origin = connectionOrigin.current;
+        const startsAtTarget = Boolean(
+          origin.nodeId &&
+          connection.target === origin.nodeId &&
+          connection.source !== origin.nodeId,
+        );
+        const source = startsAtTarget ? connection.target : connection.source;
+        const target = startsAtTarget ? connection.source : connection.target;
+        const rawSourceHandle = startsAtTarget
+          ? connection.targetHandle ?? origin.handleId
+          : connection.sourceHandle ?? origin.handleId;
+        const rawTargetHandle = startsAtTarget
+          ? connection.sourceHandle
+          : connection.targetHandle;
+        const normalizeArchHandle = (
+          nodeId: string | null,
+          handleId: string | null,
+          role: "source" | "target",
+        ) => {
+          const node = nodes.find((candidate) => candidate.id === nodeId);
+          if (node?.type !== "arch" || !handleId) return handleId;
+          const side = handleId.split("-")[0];
+          return `${side}-${role}`;
+        };
+        onConnect(
+          {
+            source,
+            target,
+            sourceHandle: normalizeArchHandle(source, rawSourceHandle, "source"),
+            targetHandle: normalizeArchHandle(target, rawTargetHandle, "target"),
+          },
+        );
+        connectionOrigin.current = { nodeId: null, handleId: null };
+      }}
+      onConnectEnd={() => {
+        connectionOrigin.current = { nodeId: null, handleId: null };
+      }}
       onPaneClick={() => setEditingNode(null)}
       onDrop={(e) => {
         const raw = e.dataTransfer.getData(ARCHETYPE_DRAG_TYPE);
@@ -75,7 +125,7 @@ function Canvas() {
                 replicas?: number;
                 maxReplicas?: number;
                 guardrailScope?: "current_turn" | "recent_history";
-                guardrailFailureMode?: "fail_closed" | "fail_open";
+                guardrailEngine?: "deterministic" | "ml" | "generative";
               };
             };
         if ("kind" in payload) addAnnotation(position);
@@ -87,6 +137,11 @@ function Canvas() {
       }}
       fitView
       connectionMode={ConnectionMode.Loose}
+      selectionOnDrag={multiSelectMode}
+      selectionMode={SelectionMode.Partial}
+      selectionKeyCode="Shift"
+      multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+      panOnDrag={multiSelectMode ? [1, 2] : true}
       deleteKeyCode={["Backspace", "Delete"]}
       proOptions={{ hideAttribution: true }}
       className="canvas-mat"
@@ -107,6 +162,27 @@ function Canvas() {
       <MiniMap pannable className="!bg-panel" position="bottom-right" />
       <Controls position="bottom-left" />
     </ReactFlow>
+    <button
+      type="button"
+      onClick={() => setMultiSelectMode((active) => !active)}
+      aria-pressed={multiSelectMode}
+      title={
+        multiSelectMode
+          ? "desativar seleção múltipla"
+          : "selecionar vários componentes por área"
+      }
+      className={`absolute left-[244px] top-3 z-20 flex h-9 select-none items-center gap-2
+                  rounded-lg border px-3 font-mono text-[10px] uppercase tracking-wider shadow-lg
+                  transition ${
+                    multiSelectMode
+                      ? "border-primary bg-primary/20 text-primary"
+                      : "border-primary/60 bg-panel/95 text-ink/70 hover:border-primary hover:text-ink"
+                  }`}
+    >
+      <span className="text-sm">{multiSelectMode ? "▣" : "▧"}</span>
+      {multiSelectMode ? "Selecionando" : "Selecionar"}
+    </button>
+    </>
   );
 }
 
@@ -218,6 +294,7 @@ export function Session() {
 
   const d = diagram.data;
   const hasCompleteIntake = isIntakeComplete(d.intake);
+  const hasContextDescription = Boolean(d.intake?.summary?.trim());
   const saveLabel: Record<SaveState, string> = {
     saved: "salvo",
     pending: "alterações pendentes…",
@@ -281,6 +358,7 @@ export function Session() {
               diagramId={d.id}
               tutorialId={tutorialId}
               hasIntake={hasCompleteIntake}
+              hasContextDescription={hasContextDescription}
               onFinish={() => setSearchParams({}, { replace: true })}
             />
           )}

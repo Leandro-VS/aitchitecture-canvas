@@ -46,7 +46,7 @@ export const FRAUD_TUTORIAL_STEPS: TutorialStep[] = [
     title: "Registre a finalidade da decisão",
     body:
       "Abra Contexto e salve ao menos: ‘Autorizar pagamentos com regras e score antifraude em tempo real, preservando evidências para auditoria’. O salvamento parcial é suficiente.",
-    done_when: [{ kind: "context_filled" }],
+    done_when: [{ kind: "context_description_saved" }],
   },
   {
     id: "baseline-simulation",

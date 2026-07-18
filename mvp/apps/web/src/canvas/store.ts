@@ -42,8 +42,8 @@ export interface ArchNodeData extends Record<string, unknown> {
   maxReplicas?: number;
   /** quanto contexto o guardrail analisa */
   guardrailScope?: "current_turn" | "recent_history";
-  /** comportamento quando a inspeção não consegue acompanhar o tráfego */
-  guardrailFailureMode?: "fail_closed" | "fail_open";
+  /** comportamento da estratégia de inspeção */
+  guardrailEngine?: "deterministic" | "ml" | "generative";
   /** sugestão do Arquiteto ainda não aceita — excluída do autosave/simulação/juiz */
   ghost?: boolean;
   proposalId?: string; // message_id do diff que criou este elemento
@@ -60,7 +60,7 @@ interface PaletteNodeDefaults {
   replicas?: number;
   maxReplicas?: number;
   guardrailScope?: "current_turn" | "recent_history";
-  guardrailFailureMode?: "fail_closed" | "fail_open";
+  guardrailEngine?: "deterministic" | "ml" | "generative";
 }
 
 export const isArchNode = (n: CanvasNode): n is Node<ArchNodeData, "arch"> =>
@@ -232,7 +232,7 @@ export const useCanvas = create<CanvasStore>()(
                 replicas: defaults?.replicas ?? 1,
                 maxReplicas: defaults?.maxReplicas ?? 10,
                 guardrailScope: defaults?.guardrailScope,
-                guardrailFailureMode: defaults?.guardrailFailureMode,
+                guardrailEngine: defaults?.guardrailEngine,
               },
             },
           ],
@@ -316,6 +316,14 @@ export const useCanvas = create<CanvasStore>()(
             scaling: "fixed",
             replicas: 1,
             maxReplicas: 10,
+            guardrailScope: ["guardrails", "output-guardrail"].includes(op.archetype)
+              ? "current_turn"
+              : undefined,
+            guardrailEngine: op.archetype === "output-guardrail"
+              ? "generative"
+              : op.archetype === "guardrails"
+                ? "deterministic"
+                : undefined,
             ghost: true,
             proposalId: messageId,
           },
