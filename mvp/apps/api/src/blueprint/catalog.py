@@ -195,7 +195,10 @@ DESCRIPTIONS: dict[str, str] = {
     "model-monitoring": (
         "Acompanha qualidade das previsões, drift dos dados e degradação do modelo."
     ),
-    "rag-retriever": "Busca e seleciona contexto relevante antes de uma chamada ao modelo.",
+    "rag-retriever": (
+        "Orquestra cache semântico, recuperação de contexto, chamada ao modelo e validação "
+        "da resposta antes de retornar ao serviço solicitante."
+    ),
     "tool-registry": "Cataloga ferramentas disponíveis para agentes e seus contratos de uso.",
     "agent-memory": "Persiste contexto e informações que o agente reutiliza entre interações.",
     "prompt-store": "Versiona prompts, configurações e templates utilizados por aplicações de IA.",

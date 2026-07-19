@@ -11,6 +11,7 @@ import {
 } from "../api/client";
 import { serializeCanvas } from "../canvas/store";
 import { useTutorialSignals } from "../tutorial/signals";
+import { MermaidPreview } from "./MermaidPreview";
 
 const field =
   "w-full select-text rounded-md border border-white/10 bg-card px-2.5 py-1.5 text-sm " +
@@ -40,7 +41,8 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
     consequences: "",
   });
   const [result, setResult] = useState<ExportOut | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ markdown: string; mermaid: string } | null>(null);
+  const [previewTab, setPreviewTab] = useState<"markdown" | "mermaid">("markdown");
   const emit = useTutorialSignals((s) => s.emit);
 
   // rascunho IA das seções editáveis (exige contexto; sem ele, campos vazios)
@@ -61,7 +63,8 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
   const doPreview = useMutation({
     mutationFn: () => previewExport(diagramId, sections, serializeCanvas()),
     onSuccess: (out) => {
-      setPreview(out.markdown);
+      setPreview(out);
+      setPreviewTab("markdown");
       emit("exportPreviewed");
     },
   });
@@ -83,7 +86,7 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
                     bg-black/60 p-8">
       <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-panel p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold">Exportar pré-ADR</h2>
+          <h2 className="font-display text-lg font-semibold">Exportar diagrama</h2>
           <button onClick={onClose} className="text-sm text-ink/50 hover:text-ink">
             fechar ✕
           </button>
@@ -91,8 +94,8 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
 
         {result ? (
           <div className="space-y-3">
-            <p className="text-sm text-emerald-300">✓ Pré-ADR gerado.</p>
-            <div className="flex gap-2">
+            <p className="text-sm text-emerald-300">✓ Arquivos de exportação gerados.</p>
+            <div className="flex flex-wrap gap-2">
               <a
                 href={result.md_url}
                 download="pre-adr.md"
@@ -111,10 +114,18 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
                   Baixar pre-adr.png
                 </a>
               )}
+              <a
+                href={result.mermaid_url}
+                download="diagram.mmd"
+                className="rounded-md border border-white/15 px-4 py-2 text-sm text-ink/80
+                           hover:border-primary/60"
+              >
+                Baixar diagram.mmd
+              </a>
             </div>
             <p className="text-xs text-ink/50">
-              O Markdown referencia a imagem como <code>pre-adr.png</code> — mantenha os dois
-              no mesmo diretório (ex.: no repositório de ADRs).
+              O Markdown referencia <code>pre-adr.png</code> e <code>diagram.mmd</code> — mantenha
+              os arquivos no mesmo diretório (ex.: no repositório de ADRs).
             </p>
           </div>
         ) : preview ? (
@@ -122,11 +133,55 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
             <p className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-200">
               Pré-visualização somente: nenhum arquivo foi criado ainda.
             </p>
-            <pre className="panel-scroll max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-md
-                            border border-white/10 bg-card p-4 font-mono text-xs leading-relaxed
-                            text-ink/80">
-              {preview}
-            </pre>
+            <div className="flex rounded-md border border-white/10 bg-card p-1">
+              <button
+                onClick={() => setPreviewTab("markdown")}
+                className={`flex-1 rounded px-3 py-1.5 text-xs transition-colors ${
+                  previewTab === "markdown"
+                    ? "bg-primary text-white"
+                    : "text-ink/60 hover:text-ink"
+                }`}
+              >
+                Pré-ADR (.md)
+              </button>
+              <button
+                onClick={() => setPreviewTab("mermaid")}
+                className={`flex-1 rounded px-3 py-1.5 text-xs transition-colors ${
+                  previewTab === "mermaid"
+                    ? "bg-primary text-white"
+                    : "text-ink/60 hover:text-ink"
+                }`}
+              >
+                Mermaid (.mmd)
+              </button>
+            </div>
+            {previewTab === "markdown" ? (
+              <pre className="panel-scroll max-h-[60vh] overflow-auto whitespace-pre-wrap
+                              rounded-md border border-white/10 bg-card p-4 font-mono text-xs
+                              leading-relaxed text-ink/80">
+                {preview.markdown}
+              </pre>
+            ) : (
+              <div className="space-y-3">
+                <MermaidPreview source={preview.mermaid} />
+                <details className="rounded-md border border-white/10 bg-card">
+                  <summary className="cursor-pointer px-3 py-2 text-xs text-ink/60
+                                      hover:text-ink">
+                    Ver código Mermaid que será exportado
+                  </summary>
+                  <pre className="panel-scroll max-h-72 overflow-auto whitespace-pre-wrap
+                                  border-t border-white/10 p-4 font-mono text-xs leading-relaxed
+                                  text-ink/80">
+                    {preview.mermaid}
+                  </pre>
+                </details>
+                <p className="text-xs text-ink/50">
+                  A prévia acima é renderizada; o arquivo <code>diagram.mmd</code> contém o
+                  código Mermaid. Componentes, nomes, comentários, conexões e intents são
+                  preservados, mas o renderizador recalcula posições e quebras das arestas.
+                </p>
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setPreview(null)}
@@ -180,7 +235,8 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
             <p className="text-xs text-ink/50">
               O documento inclui automaticamente: requisitos do contexto, imagem do canvas,
               tabela de componentes, comentários, resumo da última simulação e a avaliação
-              do Juiz (score + findings com citações).
+              do Juiz (score + findings com citações). A exportação também gera a topologia
+              do diagrama em Mermaid.
             </p>
             <button
               onClick={() => doPreview.mutate()}
@@ -188,7 +244,7 @@ export function ExportDialog({ diagramId, hasIntake, onClose }: Props) {
               className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-white
                          hover:bg-primary/80 disabled:opacity-50"
             >
-              {doPreview.isPending ? "Montando prévia…" : "Pré-visualizar pré-ADR"}
+              {doPreview.isPending ? "Montando prévia…" : "Pré-visualizar exportação"}
             </button>
             {doPreview.isError && (
               <p className="text-sm text-red-400">{String(doPreview.error)}</p>

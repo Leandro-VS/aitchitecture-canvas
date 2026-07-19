@@ -45,8 +45,8 @@ export const FRAUD_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Registre a finalidade da decisão",
     body:
-      "Abra Contexto e salve ao menos: ‘Autorizar pagamentos com regras e score antifraude em tempo real, preservando evidências para auditoria’. O salvamento parcial é suficiente.",
-    done_when: [{ kind: "context_description_saved" }],
+      "Abra Contexto e preencha todos os campos abaixo. O AI Judge só será liberado quando o contexto obrigatório estiver completo.\n\nDescrição:\nSistema antifraude para autorizar ou recusar pagamentos em tempo real usando regras e score de risco.\n\nRequisitos (um por linha):\nReceber tentativas de pagamento\nConsultar features consistentes com o treinamento\nGerar score de fraude em tempo real\nRegistrar decisões e evidências para auditoria\n\nConsiderações:\nA autorização deve manter baixa latência; auditoria e evolução do modelo não podem alongar o caminho online.\n\nClassificação de dados:\nConfidencial\n\nFora de escopo:\nRevisão manual, contestação de pagamentos, chargeback e investigação humana.",
+    done_when: [{ kind: "context_filled" }],
   },
   {
     id: "baseline-simulation",
@@ -101,12 +101,12 @@ export const FRAUD_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Torne a consulta de features explícita",
     body:
-      "Adicione Feature Store. Remova App Server → Real-time Inference; conecte App Server → Feature Store com retrieval e Feature Store → Real-time Inference com ai_call.",
+      "Adicione Feature Store e conecte App Server → Feature Store com retrieval. Mantenha App Server → Real-time Inference com ai_call; não conecte o Feature Store ao endpoint. O App Server busca as features quentes, recebe o retorno implicitamente, monta o request de inferência e então chama o modelo. Se o diagrama veio da versão anterior, remova Feature Store → Real-time Inference.",
     done_when: [
       { kind: "node_added", archetype: "feature-store" },
       { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "feature-store", intent: "retrieval" },
-      { kind: "edge_between", sourceArchetype: "feature-store", targetArchetype: "model-endpoint-realtime", intent: "ai_call" },
-      { kind: "edge_absent", sourceArchetype: "app-server", targetArchetype: "model-endpoint-realtime" },
+      { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "model-endpoint-realtime", intent: "ai_call" },
+      { kind: "edge_absent", sourceArchetype: "feature-store", targetArchetype: "model-endpoint-realtime" },
     ],
   },
   {
@@ -221,8 +221,9 @@ export const FRAUD_TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "export",
     kind: "action",
-    title: "Confira o pré-ADR",
-    body: "Clique Exportar e abra Pré-visualizar pré-ADR. A prévia não gera um arquivo no MVP.",
+    title: "Confira a exportação",
+    body:
+      "Clique Exportar e abra Pré-visualizar exportação. Confira o pré-ADR e alterne para Mermaid (.mmd); a prévia ainda não cria arquivos.",
     done_when: [{ kind: "export_previewed" }],
   },
   {

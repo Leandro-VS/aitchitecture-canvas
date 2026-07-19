@@ -331,6 +331,107 @@ def simulate(
     def spec(nid: str) -> ArchetypeSpec:
         return archetypes[node_by_id[nid]["data"]["archetype"]]
 
+    def is_guardrail(nid: str, archetype_class: str | None = None) -> bool:
+        klass = spec(nid).archetype_class
+        if archetype_class is not None:
+            return klass == archetype_class
+        return klass in {"input-guardrail", "output-guardrail"}
+
+    # Uma aresta validation para um guardrail terminal representa uma chamada
+    # síncrona do orquestrador e sua resposta implícita. Ela não transfere a
+    # responsabilidade pelo restante do fluxo ao guardrail. Diagramas antigos,
+    # nos quais o guardrail ainda possui saídas, continuam com a semântica em série.
+    sidecar_validation_by_source: dict[str, list[dict]] = {}
+    for edge in edges:
+        target = edge["target"]
+        intent = (edge.get("data") or {}).get("intent", "request")
+        target_has_flow_out = any(
+            (candidate.get("data") or {}).get("intent") != "annotation"
+            for candidate in out_edges.get(target, [])
+        )
+        if intent == "validation" and is_guardrail(target) and not target_has_flow_out:
+            sidecar_validation_by_source.setdefault(edge["source"], []).append(edge)
+
+    input_validation_by_source = {
+        source: [edge for edge in validations if is_guardrail(edge["target"], "input-guardrail")]
+        for source, validations in sidecar_validation_by_source.items()
+    }
+    output_validation_by_source = {
+        source: [edge for edge in validations if is_guardrail(edge["target"], "output-guardrail")]
+        for source, validations in sidecar_validation_by_source.items()
+    }
+    input_sidecars = {
+        edge["target"]
+        for validations in input_validation_by_source.values()
+        for edge in validations
+    }
+    output_sidecars = {
+        edge["target"]
+        for validations in output_validation_by_source.values()
+        for edge in validations
+    }
+    sidecar_edges = {
+        id(edge) for validations in sidecar_validation_by_source.values() for edge in validations
+    }
+
+    # Agent Memory é uma dependência da validação histórica chamada pelo mesmo
+    # App Server. A chamada recebe o tráfego liberado pelo primeiro guardrail e
+    # não vira o próximo dono do fluxo.
+    context_memory_by_source: dict[str, list[dict]] = {}
+    for source, validations in input_validation_by_source.items():
+        has_history_guard = any(
+            _guardrail_config(node_by_id[edge["target"]])[0] == "recent_history"
+            for edge in validations
+        )
+        if not has_history_guard:
+            continue
+        memories = [
+            edge
+            for edge in out_edges.get(source, [])
+            if spec(edge["target"]).archetype == "agent-memory"
+            and (edge.get("data") or {}).get("intent") == "retrieval"
+        ]
+        if memories:
+            context_memory_by_source[source] = memories
+    context_memory_edges = {
+        id(edge) for memories in context_memory_by_source.values() for edge in memories
+    }
+
+    # O serviço de aplicação consulta o Feature Store, recebe as features e só
+    # então chama a inferência. As duas arestas partem do orquestrador; o store
+    # não se transforma no chamador do modelo.
+    feature_lookup_by_source: dict[str, list[dict]] = {}
+    for source, outgoing in out_edges.items():
+        has_realtime_inference = any(
+            spec(edge["target"]).archetype_class == "ml-realtime"
+            and (edge.get("data") or {}).get("intent") == "ai_call"
+            for edge in outgoing
+        )
+        if not has_realtime_inference:
+            continue
+        lookups = [
+            edge
+            for edge in outgoing
+            if spec(edge["target"]).archetype_class == "feature-store"
+            and (edge.get("data") or {}).get("intent") == "retrieval"
+        ]
+        if lookups:
+            feature_lookup_by_source[source] = lookups
+    feature_lookup_edges = {
+        id(edge) for lookups in feature_lookup_by_source.values() for edge in lookups
+    }
+
+    flow_out_edges = {
+        source: [
+            edge
+            for edge in outgoing
+            if id(edge) not in sidecar_edges
+            and id(edge) not in context_memory_edges
+            and id(edge) not in feature_lookup_edges
+        ]
+        for source, outgoing in out_edges.items()
+    }
+
     entries = sorted(nid for nid in node_by_id if spec(nid).archetype_class == "client")
     if not entries:
         with_incoming = {edge["target"] for edge in edges}
@@ -338,7 +439,9 @@ def simulate(
     if not entries:
         return empty
 
-    order = _topological_order(sorted(node_by_id), out_edges)
+    order = _topological_order(sorted(node_by_id), flow_out_edges)
+    sidecar_nodes = input_sidecars | output_sidecars
+    order = [nid for nid in order if nid not in sidecar_nodes] + sorted(sidecar_nodes)
     profiles = {nid: _profile(spec(nid)) for nid in node_by_id}
     configs = {nid: _node_config(node_by_id[nid]) for nid in node_by_id}
     active_units = {nid: configs[nid][2] for nid in node_by_id}
@@ -394,7 +497,7 @@ def simulate(
         multi_turn_attacks = dict.fromkeys(node_by_id, 0.0)
         guardrail_blocked = dict.fromkeys(node_by_id, 0.0)
         guardrail_uninspected = dict.fromkeys(node_by_id, 0.0)
-        guardrail_benign_errors = dict.fromkeys(node_by_id, 0.0)
+        guardrail_benign_blocked = dict.fromkeys(node_by_id, 0.0)
         for nid in entries:
             inflow[nid] = total_in / len(entries)
             if params.scenario == "prompt_attack":
@@ -417,49 +520,65 @@ def simulate(
             single_by_node[target] += single_attacks * fraction
             multi_by_node[target] += multi_attacks * fraction
 
+        def inspect_guardrail(
+            guard_id: str,
+            rate: float,
+            single_attacks: float,
+            multi_attacks: float,
+            *,
+            record_call: bool,
+            blocked_by_node: dict[str, float] = guardrail_blocked,
+            benign_blocked_by_node: dict[str, float] = guardrail_benign_blocked,
+        ) -> tuple[float, float, float]:
+            if rate <= 0:
+                return 0.0, 0.0, 0.0
+            if record_call:
+                deliver(guard_id, rate, rate, single_attacks, multi_attacks)
+            scope, engine = _guardrail_config(node_by_id[guard_id])
+            capacity = effective_capacity(guard_id)
+            inspected_fraction = (
+                1.0 if capacity == INFINITE else min(1.0, capacity / rate)
+            )
+            detection = GUARDRAIL_DETECTION[engine]
+            detected_single = single_attacks * inspected_fraction * detection["single"]
+            detected_multi = (
+                multi_attacks * inspected_fraction * detection["multi"]
+                if scope == "recent_history"
+                else 0.0
+            )
+            overflow = rate * (1 - inspected_fraction)
+            single_overflow = single_attacks * (1 - inspected_fraction)
+            multi_overflow = multi_attacks * (1 - inspected_fraction)
+            malicious_blocked = detected_single + detected_multi
+            benign_overflow = max(0.0, overflow - single_overflow - multi_overflow)
+            benign_blocked_by_node[guard_id] += benign_overflow
+            blocked_by_node[guard_id] += malicious_blocked + overflow
+            return (
+                max(0.0, rate - malicious_blocked - overflow),
+                max(0.0, single_attacks - detected_single - single_overflow),
+                max(0.0, multi_attacks - detected_multi - multi_overflow),
+            )
+
         for nid in order:
-            outs = out_edges.get(nid, [])
+            outs = flow_out_edges.get(nid, [])
             profile = profiles[nid]
             capacity = effective_capacity(nid)
             forward_rate = inflow[nid]
             forward_single = single_turn_attacks[nid]
             forward_multi = multi_turn_attacks[nid]
 
-            if profile.key in {"input_guardrail", "output_guardrail"} and inflow[nid] > 0:
-                scope, engine = _guardrail_config(node_by_id[nid])
-                inspected_fraction = (
-                    1.0 if capacity == INFINITE else min(1.0, capacity / inflow[nid])
+            if (
+                profile.key in {"input_guardrail", "output_guardrail"}
+                and nid not in input_sidecars
+                and inflow[nid] > 0
+            ):
+                forward_rate, forward_single, forward_multi = inspect_guardrail(
+                    nid,
+                    inflow[nid],
+                    single_turn_attacks[nid],
+                    multi_turn_attacks[nid],
+                    record_call=False,
                 )
-                detection = GUARDRAIL_DETECTION[engine]
-                detected_single = (
-                    single_turn_attacks[nid]
-                    * inspected_fraction
-                    * detection["single"]
-                )
-                detected_multi = (
-                    multi_turn_attacks[nid]
-                    * inspected_fraction
-                    * detection["multi"]
-                    if scope == "recent_history"
-                    else 0.0
-                )
-                overflow = inflow[nid] * (1 - inspected_fraction)
-                single_overflow = single_turn_attacks[nid] * (1 - inspected_fraction)
-                multi_overflow = multi_turn_attacks[nid] * (1 - inspected_fraction)
-                malicious_blocked = detected_single + detected_multi
-                forward_single -= detected_single
-                forward_multi -= detected_multi
-                # Guardrails operam sempre em fail closed: se a capacidade de
-                # inspeção acabar, o tráfego excedente não segue sem validação.
-                benign_overflow = max(0.0, overflow - single_overflow - multi_overflow)
-                guardrail_benign_errors[nid] = benign_overflow / inflow[nid]
-                guardrail_blocked[nid] = malicious_blocked + overflow
-                forward_rate -= malicious_blocked + overflow
-                forward_single -= single_overflow
-                forward_multi -= multi_overflow
-                forward_rate = max(0.0, forward_rate)
-                forward_single = max(0.0, forward_single)
-                forward_multi = max(0.0, forward_multi)
 
             # Mesmo após uma entrada limpa, uma geração pode produzir conteúdo
             # que a política de saída precisa reter. No cenário adversarial,
@@ -471,6 +590,67 @@ def simulate(
                 and forward_rate > 0
             ):
                 forward_single = max(forward_single, forward_rate * 0.05)
+
+            # O orquestrador chama guardrails e recebe suas decisões. Input
+            # Guardrails filtram em ordem; a memória alimenta a etapa histórica.
+            # O Output Guardrail recebe a resposta aceita como uma chamada
+            # terminal, sem se tornar o dono do caminho principal.
+            input_validations = input_validation_by_source.get(nid, [])
+            current_validations = [
+                edge
+                for edge in input_validations
+                if _guardrail_config(node_by_id[edge["target"]])[0] == "current_turn"
+            ]
+            history_validations = [
+                edge
+                for edge in input_validations
+                if _guardrail_config(node_by_id[edge["target"]])[0] == "recent_history"
+            ]
+            for edge in current_validations:
+                forward_rate, forward_single, forward_multi = inspect_guardrail(
+                    edge["target"],
+                    forward_rate,
+                    forward_single,
+                    forward_multi,
+                    record_call=True,
+                )
+            for edge in context_memory_by_source.get(nid, []):
+                deliver(
+                    edge["target"],
+                    forward_rate,
+                    forward_rate,
+                    forward_single,
+                    forward_multi,
+                )
+            for edge in history_validations:
+                forward_rate, forward_single, forward_multi = inspect_guardrail(
+                    edge["target"],
+                    forward_rate,
+                    forward_single,
+                    forward_multi,
+                    record_call=True,
+                )
+            for edge in feature_lookup_by_source.get(nid, []):
+                deliver(
+                    edge["target"],
+                    forward_rate,
+                    forward_rate,
+                    forward_single,
+                    forward_multi,
+                )
+            for edge in output_validation_by_source.get(nid, []):
+                response_risk = (
+                    max(forward_single, forward_rate * 0.05)
+                    if params.scenario == "prompt_attack"
+                    else forward_single
+                )
+                deliver(
+                    edge["target"],
+                    forward_rate,
+                    forward_rate,
+                    response_risk,
+                    forward_multi,
+                )
 
             # Inferência assíncrona e jobs em lote aceitam trabalho e o drenam
             # pela própria capacidade. Excesso vira backlog, não erro HTTP nem
@@ -600,7 +780,7 @@ def simulate(
                 else _error_rate(utilization)
             )
             if profile.key in {"input_guardrail", "output_guardrail"}:
-                errors = guardrail_benign_errors[nid]
+                errors = guardrail_benign_blocked[nid] / max(inflow[nid], 1)
             node_health = _health(utilization)
             backlog_seconds = backlog[nid] / max(inflow[nid], 1)
             if backlog[nid] > 0:
@@ -679,11 +859,48 @@ def simulate(
             seen: frozenset[str],
             metrics: dict[str, NodeMetrics] = step_metrics,
         ) -> list[float]:
-            own = metrics[nid].latency_ms
+            current_guard_latency = sum(
+                metrics[edge["target"]].latency_ms
+                for edge in input_validation_by_source.get(nid, [])
+                if _guardrail_config(node_by_id[edge["target"]])[0] == "current_turn"
+            )
+            history_guard_latency = sum(
+                metrics[edge["target"]].latency_ms
+                for edge in input_validation_by_source.get(nid, [])
+                if _guardrail_config(node_by_id[edge["target"]])[0] == "recent_history"
+            )
+            memory_latency = max(
+                (
+                    metrics[edge["target"]].latency_ms
+                    for edge in context_memory_by_source.get(nid, [])
+                ),
+                default=0.0,
+            )
+            output_guard_latency = sum(
+                metrics[edge["target"]].latency_ms
+                for edge in output_validation_by_source.get(nid, [])
+            )
+            feature_lookup_latency = sum(
+                metrics[edge["target"]].latency_ms
+                for edge in feature_lookup_by_source.get(nid, [])
+            )
+            own = (
+                metrics[nid].latency_ms
+                + current_guard_latency
+                + max(history_guard_latency, memory_latency)
+                + feature_lookup_latency
+                + output_guard_latency
+            )
             if profiles[nid].key in BUFFERED_COMPUTE_PROFILES:
                 return [own]
             tails: list[float] = []
             for edge in out_edges.get(nid, []):
+                if (
+                    id(edge) in sidecar_edges
+                    or id(edge) in context_memory_edges
+                    or id(edge) in feature_lookup_edges
+                ):
+                    continue
                 if edge["target"] in seen:
                     continue
                 target_profile = profiles[edge["target"]].key

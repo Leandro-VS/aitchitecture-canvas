@@ -13,10 +13,18 @@ CANVAS = {
     "nodes": [
         {"id": "c1", "type": "arch", "position": {"x": 0, "y": 0},
          "data": {"archetype": "client", "label": "Client (Web)", "name": "Cliente"}},
+        {"id": "app", "type": "arch", "position": {"x": 100, "y": 0},
+         "data": {"archetype": "app-server", "label": "App Server", "name": "App"}},
+        {"id": "rag", "type": "arch", "position": {"x": 150, "y": 0},
+         "data": {"archetype": "rag-retriever", "label": "RAG Retriever", "name": "RAG"}},
         {"id": "gw", "type": "arch", "position": {"x": 200, "y": 0},
          "data": {"archetype": "llm-gateway", "label": "LLM Gateway", "name": "Gateway LLM"}},
     ],
-    "edges": [{"id": "e1", "source": "c1", "target": "gw", "data": {"intent": "llm_call"}}],
+    "edges": [
+        {"id": "e1", "source": "c1", "target": "app", "data": {"intent": "request"}},
+        {"id": "e2", "source": "app", "target": "rag", "data": {"intent": "retrieval"}},
+        {"id": "e3", "source": "rag", "target": "gw", "data": {"intent": "ai_call"}},
+    ],
     "viewport": None,
 }
 
@@ -48,8 +56,8 @@ async def test_chat_streams_and_proposes_valid_diff(client, indexed_corpus):
     assert "SEC-012" in text
     diff = json.loads(events["proposed_diff"][0])
     ops = diff["ops"]
-    assert ops[0]["op"] == "add_node" and ops[0]["archetype"] == "guardrails"
-    assert ops[1]["source"] == "gw"  # archetype:llm-gateway resolvido p/ id real
+    assert ops[0]["op"] == "add_node" and ops[0]["archetype"] == "output-guardrail"
+    assert ops[1]["source"] == "rag"  # pipeline RAG chama e recebe a decisão
 
     # histórico persistido (user + assistant com diff proposto)
     messages = (

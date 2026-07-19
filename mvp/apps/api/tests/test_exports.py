@@ -68,6 +68,7 @@ async def test_export_renders_md_and_uploads(client, seed_archetypes):
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["png_url"] is not None
+    assert body["mermaid_url"]
 
     md = httpx.get(body["md_url"]).text
     assert "# Encurtador de URL" in md
@@ -77,6 +78,13 @@ async def test_export_renders_md_and_uploads(client, seed_archetypes):
     assert "RPS total" in md  # resumo da simulação
     assert "Contexto revisado." in md and "Decisão X." in md
     assert "_Diagrama ainda não avaliado pelo Juiz IA._" in md
+
+    mermaid = httpx.get(body["mermaid_url"]).text
+    assert mermaid.startswith("flowchart LR\n")
+    assert 'n0["Cliente<br/>Client (Web)"]' in mermaid
+    assert 'n0 -->|"request"| n1' in mermaid
+    assert 'n2["mapeia short-code para URL"]:::comment' in mermaid
+    assert "n2 -.-> n1" in mermaid
 
     listed = (await client.get("/api/exports", params={"diagram_id": created["id"]})).json()
     assert len(listed) == 1
@@ -130,6 +138,7 @@ async def test_preview_uses_current_canvas_without_creating_export(client):
     assert "Só na prévia" in res.json()["markdown"]
     assert "None" not in res.json()["markdown"]
     assert "**Considerações e restrições:** _a preencher_" in res.json()["markdown"]
+    assert 'n3["Só na prévia<br/>Cache"]' in res.json()["mermaid"]
 
     listed = (await client.get("/api/exports", params={"diagram_id": created["id"]})).json()
     assert listed == []

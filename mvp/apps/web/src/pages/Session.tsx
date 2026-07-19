@@ -294,7 +294,6 @@ export function Session() {
 
   const d = diagram.data;
   const hasCompleteIntake = isIntakeComplete(d.intake);
-  const hasContextDescription = Boolean(d.intake?.summary?.trim());
   const saveLabel: Record<SaveState, string> = {
     saved: "salvo",
     pending: "alterações pendentes…",
@@ -358,7 +357,6 @@ export function Session() {
               diagramId={d.id}
               tutorialId={tutorialId}
               hasIntake={hasCompleteIntake}
-              hasContextDescription={hasContextDescription}
               onFinish={() => setSearchParams({}, { replace: true })}
             />
           )}

@@ -11,6 +11,10 @@ from blueprint.architect.diff import (
 
 CANVAS = {
     "nodes": [
+        {"id": "app", "type": "arch", "position": {"x": 0, "y": 0},
+         "data": {"archetype": "app-server", "name": "App"}},
+        {"id": "rag", "type": "arch", "position": {"x": 0, "y": 0},
+         "data": {"archetype": "rag-retriever", "name": "RAG"}},
         {"id": "gw", "type": "arch", "position": {"x": 0, "y": 0},
          "data": {"archetype": "llm-gateway", "name": "Gateway LLM"}},
         {"id": "db", "type": "arch", "position": {"x": 0, "y": 0},
@@ -26,8 +30,8 @@ def diff(ops: list[dict]) -> ProposedDiff:
 
 def test_resolve_semantic_refs_and_drop_unresolvable():
     d = diff([
-        {"op": "add_node", "id": "new-g", "archetype": "guardrails", "name": "Guardrails"},
-        {"op": "connect", "source": "archetype:llm-gateway", "target": "new-g",
+        {"op": "add_node", "id": "new-g", "archetype": "output-guardrail", "name": "Guardrails"},
+        {"op": "connect", "source": "archetype:rag-retriever", "target": "new-g",
          "intent": "validation"},
         {"op": "connect", "source": "archetype:semantic-cache", "target": "new-g"},  # não existe
         {"op": "update_metadata", "id": "pg", "fields": {"subtitle": "read replica"}},
@@ -36,7 +40,7 @@ def test_resolve_semantic_refs_and_drop_unresolvable():
     kinds = [op.op for op in resolved.ops]
     assert kinds == ["add_node", "connect", "update_metadata"]  # conexão órfã descartada
     connect = resolved.ops[1]
-    assert connect.source == "gw" and connect.target == "new-g"
+    assert connect.source == "rag" and connect.target == "new-g"
     assert resolved.ops[2].id == "db"  # nome "pg" → id
 
 
@@ -57,14 +61,14 @@ def test_prepare_diff_full_pipeline():
         "rationale": "guardrail de saída",
         "citations": [{"doc_id": "SEC-012", "section": "Regra", "excerpt": "x"}],
         "ops": [
-            {"op": "add_node", "id": "new-g", "archetype": "guardrails", "name": "G"},
-            {"op": "connect", "source": "archetype:llm-gateway", "target": "new-g",
+            {"op": "add_node", "id": "new-g", "archetype": "output-guardrail", "name": "G"},
+            {"op": "connect", "source": "archetype:rag-retriever", "target": "new-g",
              "intent": "validation"},
         ],
     }
     result = prepare_diff(payload, CANVAS)
     assert len(result.ops) == 2
-    assert result.ops[1].source == "gw"
+    assert result.ops[1].source == "rag"
 
 
 def test_truncate_sketch_prunes_orphan_connections():

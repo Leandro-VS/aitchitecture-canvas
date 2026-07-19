@@ -18,6 +18,7 @@ from ..exports.adr import (
     draft_sections,
     render_adr,
 )
+from ..exports.mermaid import render_mermaid
 from .diagrams import require_intake
 
 router = APIRouter(tags=["exports"])
@@ -57,6 +58,7 @@ class PreviewRequest(BaseModel):
 
 class PreviewOut(BaseModel):
     markdown: str
+    mermaid: str
 
 
 @router.post("/api/exports/preview")
@@ -74,7 +76,10 @@ async def preview_export(
         body.sections,
         body.canvas_state,
     )
-    return PreviewOut(markdown=render_adr(context))
+    return PreviewOut(
+        markdown=render_adr(context),
+        mermaid=render_mermaid(body.canvas_state or diagram.canvas_state),
+    )
 
 
 class ExportRequest(BaseModel):
@@ -90,6 +95,7 @@ class ExportOut(BaseModel):
     format: str
     md_url: str
     png_url: str | None
+    mermaid_url: str
     created_at: dt.datetime
 
 
@@ -99,7 +105,7 @@ async def create_export(
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ExportOut:
-    """Render Jinja2 → MD (+PNG) no MinIO/S3 com URL assinada. Sem IA aqui —
+    """Render Jinja2 → MD, Mermaid (+PNG) no MinIO/S3 com URL assinada. Sem IA aqui —
     exportar funciona mesmo sem intake (seções ficam 'a preencher')."""
     diagram = await _owned_diagram(session, user.id, body.diagram_id)
     context = await build_adr_context(
@@ -110,11 +116,18 @@ async def create_export(
         body.canvas_state,
     )
     md = render_adr(context)
+    mermaid = render_mermaid(body.canvas_state or diagram.canvas_state)
 
     slug = dt.datetime.now(dt.UTC).strftime("%Y%m%d-%H%M%S")
     base_key = f"exports/{diagram.id}/{slug}"
     md_key = f"{base_key}/pre-adr.md"
+    mermaid_key = f"{base_key}/diagram.mmd"
     await objstore.put_object(md_key, md.encode("utf-8"), "text/markdown; charset=utf-8")
+    await objstore.put_object(
+        mermaid_key,
+        mermaid.encode("utf-8"),
+        "text/plain; charset=utf-8",
+    )
 
     png_url = None
     if body.png_data_url:
@@ -134,6 +147,7 @@ async def create_export(
         format="md",
         md_url=await objstore.presign(md_key),
         png_url=png_url,
+        mermaid_url=await objstore.presign(mermaid_key),
         created_at=export.created_at,
     )
 
@@ -156,6 +170,7 @@ async def list_exports(
             format=e.format,
             md_url=await objstore.presign(e.s3_key),
             png_url=await objstore.presign(e.s3_key.replace("pre-adr.md", "pre-adr.png")),
+            mermaid_url=await objstore.presign(e.s3_key.replace("pre-adr.md", "diagram.mmd")),
             created_at=e.created_at,
         )
         for e in rows

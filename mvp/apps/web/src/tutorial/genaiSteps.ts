@@ -1,7 +1,7 @@
 import type { TutorialStep } from "./steps";
 
 export const OUTPUT_GUARDRAIL_PROMPT =
-  "Como impeço que uma resposta insegura do LLM chegue ao usuário?";
+  "Como faço o fluxo de RAG validar uma resposta antes de devolvê-la ao App Server?";
 
 export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
   {
@@ -46,8 +46,8 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Registre o contexto do exercício",
     body:
-      "Abra Contexto e salve ao menos a descrição: ‘Assistente conversacional com respostas fundamentadas na base interna’. Você pode salvar parcialmente; o contexto acompanhará IA, Juiz e pré-ADR.",
-    done_when: [{ kind: "context_description_saved" }],
+      "Abra Contexto e preencha todos os campos abaixo. O AI Judge só será liberado quando o contexto obrigatório estiver completo.\n\nDescrição:\nAssistente conversacional com RAG que responde perguntas usando a base interna da empresa e mantém contexto recente.\n\nRequisitos (um por linha):\nResponder perguntas em linguagem natural\nRecuperar e citar conhecimento da base interna\nManter o histórico recente da conversa\nBloquear entradas e respostas inseguras\n\nConsiderações:\nCanal externo com respostas fundamentadas; a memória pode aceitar consistência eventual, mas dados internos não podem vazar.\n\nClassificação de dados:\nConfidencial\n\nFora de escopo:\nIngestão offline de documentos, atendimento humano e treinamento de modelos.",
+    done_when: [{ kind: "context_filled" }],
   },
   {
     id: "baseline-simulation",
@@ -114,16 +114,18 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Modele o caminho de recuperação",
     body:
-      "Adicione RAG Retriever, Embedding Service e Vector DB. Conecte App Server → RAG Retriever com retrieval. A partir do RAG Retriever, conecte Embedding Service com ai_call, Vector DB com retrieval e LLM Gateway com ai_call. Remova a ligação direta App Server → LLM. As arestas representam chamadas iniciadas pelo Retriever; as respostas são implícitas. Ele gera o embedding da pergunta, consulta o índice, monta o contexto recuperado e então chama o modelo.",
+      "Adicione RAG Retriever, Embedding Service e Vector DB. O Retriever será o orquestrador do pipeline: remova App Server → Semantic Cache e App Server → LLM Gateway; conecte App Server → RAG Retriever com retrieval. A partir do RAG Retriever, conecte Semantic Cache com cache_lookup, Embedding Service com ai_call, Vector DB com retrieval e LLM Gateway com ai_call. As respostas dessas chamadas retornam implicitamente ao Retriever, que devolve o resultado ao App Server. Em cache hit ele pode encerrar cedo; em miss, gera o embedding, consulta o índice, monta o contexto e chama o modelo.",
     done_when: [
       { kind: "node_added", archetype: "rag-retriever" },
       { kind: "node_added", archetype: "embedding-service" },
       { kind: "node_added", archetype: "vector-db" },
       { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "rag-retriever", intent: "retrieval" },
+      { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "semantic-cache", intent: "cache_lookup" },
       { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "embedding-service", intent: "ai_call" },
       { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "vector-db", intent: "retrieval" },
       { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "llm-gateway", intent: "ai_call" },
       { kind: "edge_absent", sourceArchetype: "app-server", targetArchetype: "llm-gateway" },
+      { kind: "edge_absent", sourceArchetype: "app-server", targetArchetype: "semantic-cache" },
     ],
   },
   {
@@ -149,13 +151,13 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Bloqueie ataques evidentes antes do LLM",
     body:
-      "Adicione Input Guardrail entre App Server e os ramos de cache/RAG: remova App Server → Semantic Cache e App Server → RAG Retriever; conecte App Server → Input Guardrail com validation e, a partir dele, conecte Semantic Cache com cache_lookup e RAG Retriever com retrieval. Nas propriedades, mantenha Estratégia = Determinístico e Interação atual. Esse primeiro filtro prioriza decisões previsíveis e baixa latência para bloquear ataques evidentes. Simule.",
+      "Adicione Input Guardrail e conecte App Server → Input Guardrail com validation. Mantenha App Server → RAG Retriever. Nas propriedades, mantenha Estratégia = Determinístico e Interação atual. A resposta da validação volta implicitamente ao App Server: se houver bloqueio, o App responde ao usuário; se houver liberação, chama o RAG Retriever. Simule.",
     done_when: [
       { kind: "node_added", archetype: "guardrails" },
       { kind: "node_config", archetype: "guardrails", fields: { guardrailEngine: "deterministic", guardrailScope: "current_turn" } },
       { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "guardrails", intent: "validation" },
-      { kind: "edge_between", sourceArchetype: "guardrails", targetArchetype: "semantic-cache", intent: "cache_lookup" },
-      { kind: "edge_between", sourceArchetype: "guardrails", targetArchetype: "rag-retriever", intent: "retrieval" },
+      { kind: "edge_absent", sourceArchetype: "guardrails", targetArchetype: "semantic-cache" },
+      { kind: "edge_absent", sourceArchetype: "guardrails", targetArchetype: "rag-retriever" },
       { kind: "simulation_node_metric", archetype: "guardrails", metric: "blocked_rps", operator: "gt", value: 0, nodeData: { guardrailScope: "current_turn" } },
     ],
   },
@@ -171,12 +173,14 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Adicione memória e proteção multi-turn",
     body:
-      "Adicione Agent Memory e um segundo Input Guardrail. Remova as saídas do primeiro guardrail para cache/RAG; conecte primeiro Input Guardrail → Agent Memory com retrieval, Agent Memory → segundo Input Guardrail com validation e dele para Semantic Cache (cache_lookup) e RAG Retriever (retrieval). Abra as propriedades do segundo, escolha Estratégia = Probabilístico e Histórico recente. Simule novamente.",
+      "Adicione Agent Memory e um segundo Input Guardrail. Conecte App Server → Agent Memory com retrieval e App Server → segundo Input Guardrail com validation. O App Server orquestra somente a proteção de entrada e recebe as respostas implicitamente. Abra o segundo guardrail, escolha Estratégia = Probabilístico e Histórico recente. Depois das liberações, o App chama apenas o RAG Retriever, que coordena o restante. Simule novamente.",
     done_when: [
       { kind: "node_added", archetype: "agent-memory" },
       { kind: "node_added", archetype: "guardrails", count: 2 },
       { kind: "node_config", archetype: "guardrails", fields: { guardrailEngine: "ml", guardrailScope: "recent_history" } },
-      { kind: "edge_between", sourceArchetype: "agent-memory", targetArchetype: "guardrails", intent: "validation" },
+      { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "agent-memory", intent: "retrieval" },
+      { kind: "edge_between", sourceArchetype: "app-server", targetArchetype: "guardrails", intent: "validation", targetData: { guardrailEngine: "ml", guardrailScope: "recent_history" } },
+      { kind: "edge_absent", sourceArchetype: "agent-memory", targetArchetype: "guardrails" },
     ],
   },
   {
@@ -184,19 +188,21 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "info",
     title: "Leia o custo da defesa em camadas",
     body:
-      "A estratégia probabilística com histórico recente tem menor capacidade efetiva e maior latência que a determinística na interação atual, mas reconhece grande parte da tentativa multi-turn. Como o primeiro filtro já retirou ataques óbvios, memória e análise contextual recebem menos trabalho. O simulador representa a cobertura probabilística como ataque residual; em produção, você também precisaria medir falsos positivos e calibrar seus critérios. Mensagens bloqueadas não devem ser persistidas no histórico; registre essa decisão no canvas.",
+      "O App Server chama primeiro a validação da interação atual. Quando ela libera, consulta a memória e executa a validação histórica; só depois chama o RAG Retriever. A partir daí, o Retriever coordena cache, recuperação e geração. As arestas mostram chamadas iniciadas por cada orquestrador, e os retornos são implícitos. A estratégia probabilística com histórico recente tem menor capacidade e maior latência que a determinística, mas reconhece grande parte da tentativa multi-turn.",
   },
   {
     id: "ask-output",
     kind: "action",
     title: "Consulte o Ask AIrchitect sobre a resposta",
     body:
-      "Envie a pergunta sugerida. Revise a proposta tracejada e clique Apply para adicionar a proteção de saída depois do LLM.",
+      "Envie a pergunta sugerida. Revise a proposta tracejada e clique Apply. O Output Guardrail deve ser uma chamada validation iniciada pelo RAG Retriever depois que ele recebe a saída do LLM. Com a liberação, o Retriever devolve a resposta ao App Server, e o App responde ao cliente.",
     suggested_prompt: OUTPUT_GUARDRAIL_PROMPT,
     done_when: [
       { kind: "architect_prompt", prompt: OUTPUT_GUARDRAIL_PROMPT },
       { kind: "node_added", archetype: "output-guardrail" },
-      { kind: "edge_between", sourceArchetype: "llm-gateway", targetArchetype: "output-guardrail", intent: "validation" },
+      { kind: "edge_between", sourceArchetype: "rag-retriever", targetArchetype: "output-guardrail", intent: "validation" },
+      { kind: "edge_absent", sourceArchetype: "app-server", targetArchetype: "output-guardrail" },
+      { kind: "edge_absent", sourceArchetype: "llm-gateway", targetArchetype: "output-guardrail" },
     ],
   },
   {
@@ -204,7 +210,7 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Defina o contexto da validação de saída",
     body:
-      "Nas propriedades do Output Guardrail escolha Estratégia = Generativo e Histórico recente, depois simule. Ele avalia a pergunta original, a resposta e os turnos anteriores com maior sensibilidade ao contexto. Note que o modelo conversacional já foi chamado: proteção de saída reduz exposição, não seu custo de geração.",
+      "Nas propriedades do Output Guardrail escolha Estratégia = Generativo e Histórico recente, depois simule. O RAG Retriever envia a pergunta original, a resposta e os turnos anteriores para validação; com a liberação, retorna ao App Server. O modelo conversacional já foi chamado: proteção de saída reduz exposição, não seu custo de geração.",
     done_when: [
       { kind: "node_config", archetype: "output-guardrail", fields: { guardrailEngine: "generative", guardrailScope: "recent_history" } },
       { kind: "simulation_node_active", archetype: "output-guardrail" },
@@ -248,7 +254,8 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     id: "export",
     kind: "action",
     title: "Confira o documento resultante",
-    body: "Clique Exportar e abra Pré-visualizar pré-ADR. A prévia não gera um arquivo no MVP.",
+    body:
+      "Clique Exportar e abra Pré-visualizar exportação. Confira o pré-ADR e alterne para Mermaid (.mmd); a prévia ainda não cria arquivos.",
     done_when: [{ kind: "export_previewed" }],
   },
   {
@@ -256,6 +263,6 @@ export const GENAI_TUTORIAL_STEPS: TutorialStep[] = [
     kind: "info",
     title: "Assistente conversacional revisado",
     body:
-      "Você usou a ferramenta para partir de um fluxo mínimo, medir quota e p99, testar cache frio, modelar RAG, observar ataques single-turn e multi-turn, posicionar guardrails de entrada e saída, separar telemetria e concluir com Juiz e pré-ADR.",
+      "Você usou a ferramenta para partir de um fluxo mínimo, medir quota e p99, testar cache frio, modelar RAG, observar ataques single-turn e multi-turn, posicionar guardrails de entrada e saída, separar telemetria e concluir com Juiz, pré-ADR e Mermaid.",
   },
 ];

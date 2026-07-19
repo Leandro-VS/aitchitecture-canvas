@@ -435,7 +435,7 @@ def test_input_guardrail_blocks_single_turn_before_the_llm_but_not_multi_turn():
             node("input", "guardrails"),
             node("llm", "llm-gateway"),
         ],
-        [edge("client", "input", "validation"), edge("input", "llm", "ai_call")],
+        [edge("client", "input", "validation"), edge("client", "llm", "ai_call")],
     )
 
     result = simulate(diagram, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
@@ -449,7 +449,7 @@ def test_input_guardrail_blocks_single_turn_before_the_llm_but_not_multi_turn():
 def test_guardrail_engines_trade_capacity_latency_and_detection_coverage():
     current = canvas(
         [node("client", "client"), node("guard", "guardrails"), node("llm", "llm-gateway")],
-        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+        [edge("client", "guard", "validation"), edge("client", "llm", "ai_call")],
     )
     ml_history = canvas(
         [
@@ -462,7 +462,7 @@ def test_guardrail_engines_trade_capacity_latency_and_detection_coverage():
             ),
             node("llm", "llm-gateway"),
         ],
-        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+        [edge("client", "guard", "validation"), edge("client", "llm", "ai_call")],
     )
     generative_history = canvas(
         [
@@ -475,7 +475,7 @@ def test_guardrail_engines_trade_capacity_latency_and_detection_coverage():
             ),
             node("llm", "llm-gateway"),
         ],
-        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+        [edge("client", "guard", "validation"), edge("client", "llm", "ai_call")],
     )
 
     current_result = simulate(current, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
@@ -511,7 +511,7 @@ def test_output_guardrail_filters_after_the_llm_without_saving_model_calls():
             node("llm", "llm-gateway"),
             node("output", "output-guardrail", guardrailScope="recent_history"),
         ],
-        [edge("client", "llm", "ai_call"), edge("llm", "output", "validation")],
+        [edge("client", "llm", "ai_call"), edge("client", "output", "validation")],
     )
 
     result = simulate(diagram, SimParams(base_rps=100, scenario="prompt_attack"), SPECS)
@@ -527,7 +527,7 @@ def test_guardrail_always_fails_closed_even_for_legacy_fail_open_nodes():
             node("guard", "guardrails", guardrailEngine="ml"),
             node("llm", "llm-gateway"),
         ],
-        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+        [edge("client", "guard", "validation"), edge("client", "llm", "ai_call")],
     )
     legacy = canvas(
         [
@@ -540,7 +540,7 @@ def test_guardrail_always_fails_closed_even_for_legacy_fail_open_nodes():
             ),
             node("llm", "llm-gateway"),
         ],
-        [edge("client", "guard", "validation"), edge("guard", "llm", "ai_call")],
+        [edge("client", "guard", "validation"), edge("client", "llm", "ai_call")],
     )
     params = SimParams(base_rps=2_000, scenario="prompt_attack")
 
@@ -600,14 +600,14 @@ def test_conversational_tutorial_layered_guardrails_match_the_story():
         [
             edge("client", "app"),
             edge("app", "early", "validation"),
-            edge("early", "memory", "retrieval"),
-            edge("memory", "history", "validation"),
-            edge("history", "cache", "cache_lookup"),
-            edge("history", "rag", "retrieval"),
+            edge("app", "memory", "retrieval"),
+            edge("app", "history", "validation"),
+            edge("app", "rag", "retrieval"),
+            edge("rag", "cache", "cache_lookup"),
+            edge("rag", "output", "validation"),
             edge("rag", "embedding", "ai_call"),
             edge("rag", "vectors", "retrieval"),
             edge("rag", "llm", "ai_call"),
-            edge("llm", "output", "validation"),
             edge("llm", "observe", "telemetry"),
         ],
     )
@@ -624,10 +624,17 @@ def test_conversational_tutorial_layered_guardrails_match_the_story():
         SPECS,
     )
 
+    assert result.nodes["early"].rps == 100
     assert result.nodes["early"].blocked_rps == 20
+    assert result.nodes["memory"].rps == 80
+    assert result.nodes["history"].rps == 80
     assert result.nodes["history"].blocked_rps == 8.5
+    assert result.nodes["rag"].rps == 71.5
+    assert result.nodes["cache"].rps == 71.5
+    assert result.nodes["vectors"].rps == 21.45
     assert result.nodes["llm"].attack_rps == 0.45
     assert result.nodes["llm"].rps == 21.45
+    assert result.nodes["output"].rps == 71.5
     assert result.nodes["output"].blocked_rps > 0
     assert result.nodes["observe"].rps == result.nodes["llm"].rps
     assert result.availability_pct == 100
@@ -665,7 +672,7 @@ def test_fraud_tutorial_scenarios_move_the_real_bottleneck():
         edge("client", "api"),
         edge("api", "app"),
         edge("app", "features", "retrieval"),
-        edge("features", "endpoint", "ai_call"),
+        edge("app", "endpoint", "ai_call"),
     ]
     hot = simulate(
         online,
@@ -678,7 +685,11 @@ def test_fraud_tutorial_scenarios_move_the_real_bottleneck():
         SPECS,
     )
     assert hot.bottleneck == "features"
+    assert hot.nodes["features"].rps == 2_000
+    assert hot.nodes["endpoint"].rps == 2_000
     assert hot.nodes["features"].error_rate > 0
+    assert hot.p99_ms > hot.nodes["features"].latency_ms
+    assert hot.p99_ms > hot.nodes["endpoint"].latency_ms
 
     online["nodes"][-1]["data"]["replicas"] = 2
     fixed = simulate(

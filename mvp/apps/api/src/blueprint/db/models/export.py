@@ -16,4 +16,4 @@ class Export(Base, TimestampMixin):
         ForeignKey("diagrams.id", ondelete="CASCADE"), index=True
     )
     format: Mapped[str] = mapped_column(String(8), default="md")
-    s3_key: Mapped[str] = mapped_column(String(300))  # do .md; .png é o irmão
+    s3_key: Mapped[str] = mapped_column(String(300))  # do .md; .png e .mmd são irmãos

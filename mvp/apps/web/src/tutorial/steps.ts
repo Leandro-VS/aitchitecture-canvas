@@ -18,11 +18,11 @@ export type Condition =
       sourceArchetype: string;
       targetArchetype: string;
       intent: string;
+      targetData?: Record<string, string | number>;
     }
   | { kind: "edge_absent"; sourceArchetype: string; targetArchetype: string }
   | { kind: "annotation_added" }
   | { kind: "context_filled" }
-  | { kind: "context_description_saved" }
   | { kind: "simulation_ran" }
   | { kind: "simulation_scenario"; scenario: SimParams["scenario"] }
   | {
@@ -129,10 +129,12 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Preencha o Contexto que acompanha o diagrama",
     body:
-      "Abra ‘Contexto’ na borda esquerda. Os campos podem ser salvos parcialmente e serão usados pelo Ask AIrchitect, pelo Juiz e pelo pré-ADR. Para este exercício, registre:\n\n" +
+      "Abra ‘Contexto’ na borda esquerda e preencha os campos abaixo. O AI Judge só será liberado quando o contexto obrigatório estiver completo; essas informações também acompanham o Ask AIrchitect e o pré-ADR.\n\n" +
       "Descrição:\nHome timeline para publicar tweets e ler as publicações das pessoas seguidas.\n\n" +
       "Requisitos (um por linha):\nPublicar tweets de até 280 caracteres\nSeguir e deixar de seguir usuários\nCarregar a timeline com p99 abaixo de 200 ms\n\n" +
-      "Considerações:\nO feed aceita consistência eventual, mas a publicação deve responder rapidamente.",
+      "Considerações:\nO feed aceita consistência eventual, mas a publicação deve responder rapidamente e nenhuma publicação pode ser perdida.\n\n" +
+      "Classificação de dados:\nInterna\n\n" +
+      "Fora de escopo:\nRanking personalizado, mídia em tweets, busca e moderação de conteúdo.",
     done_when: [{ kind: "context_filled" }],
   },
   {
@@ -331,7 +333,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     kind: "action",
     title: "Revise o artefato antes de efetivar a exportação",
     body:
-      "Clique ‘Exportar’, revise as seções e escolha ‘Pré-visualizar pré-ADR’. A prévia mostra o resultado sem criar arquivo ou registro.",
+      "Clique ‘Exportar’, revise as seções e escolha ‘Pré-visualizar exportação’. Alterne entre ‘Pré-ADR (.md)’ e ‘Mermaid (.mmd)’; a prévia mostra os dois artefatos sem criar arquivo ou registro.",
     done_when: [{ kind: "export_previewed" }],
   },
   {
@@ -339,6 +341,6 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     kind: "info",
     title: "Você percorreu o fluxo principal da ferramenta",
     body:
-      "Você criou e conectou componentes, explicitou a distribuição de carga, editou capacidade, registrou contexto, configurou uma referência, leu HUD e timeline, comparou cenários, aplicou diffs do Ask AIrchitect, representou processamento assíncrono e falhas, executou o Juiz e abriu a prévia do pré-ADR. O mesmo fluxo pode agora ser repetido com outro problema e outros critérios.",
+      "Você criou e conectou componentes, explicitou a distribuição de carga, editou capacidade, registrou contexto, configurou uma referência, leu HUD e timeline, comparou cenários, aplicou diffs do Ask AIrchitect, representou processamento assíncrono e falhas, executou o Juiz e abriu a prévia do pré-ADR e do Mermaid. O mesmo fluxo pode agora ser repetido com outro problema e outros critérios.",
   },
 ];

@@ -506,6 +506,20 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
               Comentários e sugestões de IA ainda não aplicadas não recebem tráfego.
             </p>
             <p className="mt-2">
+              Uma conexão <strong className="font-medium text-ink/80">validation</strong> do
+              orquestrador para um guardrail terminal representa uma chamada síncrona com retorno
+              implícito. O guardrail decide bloquear ou liberar, mas não se torna o próximo dono do
+              fluxo. Input Guardrails filtram antes das chamadas principais; Output Guardrails
+              validam a resposta antes de o orquestrador devolvê-la ao cliente.
+            </p>
+            <p className="mt-2">
+              Quando o mesmo serviço chama <strong className="font-medium text-ink/80">Feature
+              Store</strong> com retrieval e <strong className="font-medium text-ink/80">Real-time
+              Inference</strong> com ai_call, o motor interpreta uma composição sequencial: o serviço
+              recebe as features, monta o request e chama a inferência. As duas arestas partem do
+              orquestrador, mas as duas latências participam do p99.
+            </p>
+            <p className="mt-2">
               Em ML, <strong className="font-medium text-ink/80">Real-time Inference</strong> participa
               normalmente de p99 e disponibilidade. <strong className="font-medium text-ink/80">Async
               Inference</strong> e <strong className="font-medium text-ink/80">Batch Inference</strong>

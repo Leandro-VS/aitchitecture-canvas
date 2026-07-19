@@ -221,6 +221,7 @@ export interface ExportOut {
   format: string;
   md_url: string;
   png_url: string | null;
+  mermaid_url: string;
   created_at: string;
 }
 
@@ -235,7 +236,7 @@ export const previewExport = (
   sections: AdrSections,
   canvasState: CanvasStatePayload,
 ) =>
-  api<{ markdown: string }>("/api/exports/preview", {
+  api<{ markdown: string; mermaid: string }>("/api/exports/preview", {
     method: "POST",
     body: JSON.stringify({ diagram_id: diagramId, sections, canvas_state: canvasState }),
   });

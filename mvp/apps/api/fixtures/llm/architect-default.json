@@ -1,5 +1,5 @@
 {
-  "content": "Olhando o seu diagrama contra os guidelines, o ponto mais crítico é a resposta do LLM alcançar o usuário sem inspeção — o guideline SEC-012 > Regra exige um guardrail de saída em todo canal externo. Preparei uma sugestão no canvas: um componente Guardrails inspecionando as respostas do LLM Gateway antes da entrega (Apply para aceitar, Dismiss para descartar). Vale considerar também um Semantic Cache na frente do gateway (REF-ARCH-RAG-01 > Componentes obrigatórios): em fluxos de pergunta-resposta a taxa de hit típica de 30–40% reduz custo e p99 de forma significativa.",
+  "content": "Olhando o seu diagrama contra os guidelines, o ponto mais crítico é a resposta do LLM alcançar o usuário sem inspeção — o guideline SEC-012 > Regra exige um guardrail de saída em todo canal externo. Preparei uma sugestão no canvas: o RAG Retriever chama um Output Guardrail, recebe a decisão e só então devolve a resposta ao App Server (Apply para aceitar, Dismiss para descartar). Vale considerar também um Semantic Cache dentro desse pipeline (REF-ARCH-RAG-01 > Componentes obrigatórios): em fluxos de pergunta-resposta a taxa de hit típica de 30–40% reduz custo e p99 de forma significativa.",
   "proposed_diff": {
     "rationale": "SEC-012 exige guardrail de saída em canais externos; o fluxo atual entrega a resposta do LLM sem inspeção.",
     "citations": [
@@ -19,7 +19,7 @@
       },
       {
         "op": "connect",
-        "source": "archetype:llm-gateway",
+        "source": "archetype:rag-retriever",
         "target": "new-guardrails",
         "intent": "validation"
       }

@@ -37,7 +37,6 @@ const compare = (actual: number, operator: "gt" | "gte" | "lt" | "lte", value: n
 function useConditionMet(
   conditions: Condition[] | undefined,
   hasIntake: boolean,
-  hasContextDescription: boolean,
 ): boolean {
   const nodes = useCanvas((s) => s.nodes);
   const edges = useCanvas((s) => s.edges);
@@ -82,7 +81,12 @@ function useConditionMet(
         );
         const targetIds = new Set(
           nodes
-            .filter((node) => node.type === "arch" && node.data.archetype === c.targetArchetype)
+            .filter(
+              (node) =>
+                node.type === "arch" &&
+                node.data.archetype === c.targetArchetype &&
+                matchesFields(node.data, c.targetData),
+            )
             .map((node) => node.id),
         );
         return edges.some(
@@ -111,8 +115,6 @@ function useConditionMet(
         return nodes.some((n) => n.type === "annotation");
       case "context_filled":
         return hasIntake;
-      case "context_description_saved":
-        return hasContextDescription;
       case "simulation_ran":
         return sim !== null;
       case "simulation_scenario":
@@ -167,7 +169,6 @@ interface Props {
   diagramId: string;
   tutorialId: TutorialId;
   hasIntake: boolean;
-  hasContextDescription: boolean;
   onFinish: () => void;
 }
 
@@ -177,7 +178,6 @@ export function TutorialOverlay({
   diagramId,
   tutorialId,
   hasIntake,
-  hasContextDescription,
   onFinish,
 }: Props) {
   const definition = TUTORIAL_DEFINITIONS[tutorialId];
@@ -191,7 +191,7 @@ export function TutorialOverlay({
   const suggestPrompt = useTutorialSignals((s) => s.suggestPrompt);
 
   const step = steps[index];
-  const satisfied = useConditionMet(step.done_when, hasIntake, hasContextDescription);
+  const satisfied = useConditionMet(step.done_when, hasIntake);
   const blocked = step.kind === "action" && !satisfied;
   const isLast = index === steps.length - 1;
 
