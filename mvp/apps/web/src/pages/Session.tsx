@@ -19,11 +19,17 @@ import { getDiagram, patchDiagram, type Intake } from "../api/client";
 import { AskAI } from "../architect/AskAI";
 import { AnnotationNode } from "../canvas/AnnotationNode";
 import { ArchNode } from "../canvas/ArchNode";
+import { GroupNode } from "../canvas/GroupNode";
 import { IntentEdge } from "../canvas/IntentEdge";
 import { IntentPicker } from "../canvas/IntentPicker";
 import { ARCHETYPE_DRAG_TYPE, Palette } from "../canvas/Palette";
 import { PropertiesCard } from "../canvas/PropertiesCard";
-import { serializeCanvas, useCanvas, type CanvasNode } from "../canvas/store";
+import {
+  serializeCanvas,
+  useCanvas,
+  type CanvasClipboard,
+  type CanvasNode,
+} from "../canvas/store";
 import { ExportDialog } from "../exports/ExportDialog";
 import { IntakeForm } from "../intake/IntakeForm";
 import { isIntakeComplete, toFormValues, toIntakeDraftPayload } from "../intake/schema";
@@ -34,7 +40,7 @@ import { parseTutorialId } from "../tutorial/catalog";
 import { useTutorialSignals } from "../tutorial/signals";
 import { TutorialOverlay } from "../tutorial/TutorialOverlay";
 
-const nodeTypes = { arch: ArchNode, annotation: AnnotationNode };
+const nodeTypes = { arch: ArchNode, annotation: AnnotationNode, visualGroup: GroupNode };
 const edgeTypes = { intent: IntentEdge };
 const AUTOSAVE_DEBOUNCE_MS = 5000;
 
@@ -48,13 +54,56 @@ function Canvas() {
   const onConnect = useCanvas((s) => s.onConnect);
   const addFromPalette = useCanvas((s) => s.addFromPalette);
   const addAnnotation = useCanvas((s) => s.addAnnotation);
+  const addGroup = useCanvas((s) => s.addGroup);
+  const pasteElements = useCanvas((s) => s.pasteElements);
   const setEditingNode = useCanvas((s) => s.setEditingNode);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const { screenToFlowPosition } = useReactFlow();
+  const clipboard = useRef<(CanvasClipboard & { pasteCount: number }) | null>(null);
   const connectionOrigin = useRef<{ nodeId: string | null; handleId: string | null }>({
     nodeId: null,
     handleId: null,
   });
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const element = target instanceof HTMLElement ? target : null;
+      return Boolean(
+        element?.isContentEditable
+        || element?.closest("input, textarea, select, [contenteditable='true']"),
+      );
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || isEditableTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        const state = useCanvas.getState();
+        const selectedNodes = state.nodes.filter((node) => node.selected && !node.data.ghost);
+        if (selectedNodes.length === 0) return;
+        const selectedIds = new Set(selectedNodes.map((node) => node.id));
+        clipboard.current = {
+          nodes: structuredClone(selectedNodes),
+          edges: structuredClone(
+            state.edges.filter((edge) => (
+              selectedIds.has(edge.source)
+              && selectedIds.has(edge.target)
+              && !(edge.data as { ghost?: boolean } | undefined)?.ghost
+            )),
+          ),
+          pasteCount: 0,
+        };
+        event.preventDefault();
+      } else if (key === "v" && clipboard.current) {
+        clipboard.current.pasteCount += 1;
+        const distance = clipboard.current.pasteCount * 36;
+        pasteElements(clipboard.current, { x: distance, y: distance });
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pasteElements]);
 
   return (
     <>
@@ -116,7 +165,7 @@ function Canvas() {
         e.preventDefault();
         const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const payload = JSON.parse(raw) as
-          | { kind: "annotation" }
+          | { kind: "annotation" | "group" }
           | {
               archetype: string;
               label: string;
@@ -128,7 +177,10 @@ function Canvas() {
                 guardrailEngine?: "deterministic" | "ml" | "generative";
               };
             };
-        if ("kind" in payload) addAnnotation(position);
+        if ("kind" in payload) {
+          if (payload.kind === "group") addGroup(position);
+          else addAnnotation(position);
+        }
         else addFromPalette(payload.archetype, payload.label, position, payload.defaults);
       }}
       onDragOver={(e) => {

@@ -1,6 +1,6 @@
 """Serialização canônica do diagrama para prompts de IA (§7.1 das specs).
 
-Compacta e estável: intake + componentes (nome/subtítulo/arquétipo/réplicas) +
+Compacta e estável: intake + componentes (nome/subtítulo/arquétipo/escopo de capacidade) +
 conexões com intents + comentários (D13, contexto autoritativo do autor) +
 última simulação. Juiz (Fase 4), Arquiteto e bootstrap (Fase 5) leem daqui.
 """
@@ -12,7 +12,7 @@ from ..db.models import Diagram, SimulationRun
 
 
 def _arch_nodes(canvas: dict) -> list[dict]:
-    return [n for n in canvas.get("nodes", []) if n.get("type") != "annotation"]
+    return [n for n in canvas.get("nodes", []) if n.get("type") == "arch"]
 
 
 def serialize_canvas(canvas: dict, intake: dict, last_simulation: dict | None) -> dict:
@@ -26,6 +26,9 @@ def serialize_canvas(canvas: dict, intake: dict, last_simulation: dict | None) -
             "subtitle": n.get("data", {}).get("subtitle") or None,
             "archetype": n.get("data", {}).get("archetype", ""),
             "replicas": n.get("data", {}).get("replicas", 1),
+            "capacity_managed_externally": bool(
+                n.get("data", {}).get("capacityManagedExternally")
+            ),
         }
         for n in nodes
     ]

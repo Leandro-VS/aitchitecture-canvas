@@ -292,7 +292,7 @@ def simulate(
     nodes = [
         node
         for node in canvas_state.get("nodes", [])
-        if node.get("type") != "annotation"
+        if node.get("type") == "arch"
         and node.get("data", {}).get("archetype") in archetypes
     ]
     node_by_id = {node["id"]: node for node in nodes}
@@ -336,6 +336,9 @@ def simulate(
         if archetype_class is not None:
             return klass == archetype_class
         return klass in {"input-guardrail", "output-guardrail"}
+
+    def capacity_managed_externally(nid: str) -> bool:
+        return bool(node_by_id[nid].get("data", {}).get("capacityManagedExternally"))
 
     # Uma aresta validation para um guardrail terminal representa uma chamada
     # síncrona do orquestrador e sua resposta implícita. Ela não transfere a
@@ -443,7 +446,18 @@ def simulate(
     sidecar_nodes = input_sidecars | output_sidecars
     order = [nid for nid in order if nid not in sidecar_nodes] + sorted(sidecar_nodes)
     profiles = {nid: _profile(spec(nid)) for nid in node_by_id}
-    configs = {nid: _node_config(node_by_id[nid]) for nid in node_by_id}
+    # Sinks de observabilidade são gerenciados fora do escopo deste simulador.
+    # Normalizar a configuração evita que dados legados de escala, hoje ocultos
+    # na interface, continuem afetando sua representação silenciosamente.
+    raw_configs = {nid: _node_config(node_by_id[nid]) for nid in node_by_id}
+    configs = {
+        nid: ("medium", "fixed", 1, 1)
+        if capacity_managed_externally(nid)
+        else (raw_configs[nid][0], "fixed", 1, 1)
+        if profiles[nid].key == "observation_sink"
+        else raw_configs[nid]
+        for nid in node_by_id
+    }
     active_units = {nid: configs[nid][2] for nid in node_by_id}
     overload_seconds = dict.fromkeys(node_by_id, 0)
     backlog = dict.fromkeys(node_by_id, 0.0)
@@ -469,6 +483,8 @@ def simulate(
         return factor
 
     def effective_capacity(nid: str) -> float:
+        if capacity_managed_externally(nid):
+            return INFINITE
         base = spec(nid).base_rps
         if base is None:
             return INFINITE
@@ -811,7 +827,11 @@ def simulate(
                 error_rate=round(errors, 4),
                 health=node_health,
                 status=status,
-                profile=profile.label,
+                profile=(
+                    f"{profile.label} · Fora da simulação"
+                    if capacity_managed_externally(nid)
+                    else profile.label
+                ),
                 size=size,
                 scaling=scaling,
                 active_units=active_units[nid],

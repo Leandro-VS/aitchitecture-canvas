@@ -144,6 +144,37 @@ async def test_preview_uses_current_canvas_without_creating_export(client):
     assert listed == []
 
 
+async def test_mermaid_preview_preserves_visual_groups(client):
+    created = (await client.post("/api/diagrams", json={"title": "Grupos"})).json()
+    canvas = {
+        "nodes": [
+            {
+                "id": "group",
+                "type": "visualGroup",
+                "position": {"x": 0, "y": 0},
+                "data": {"name": "Camada transacional", "width": 500, "height": 300},
+            },
+            {
+                "id": "app",
+                "type": "arch",
+                "position": {"x": 100, "y": 100},
+                "data": {"archetype": "app-server", "label": "App Server", "name": "API"},
+            },
+        ],
+        "edges": [],
+    }
+
+    res = await client.post(
+        "/api/exports/preview",
+        json={"diagram_id": created["id"], "canvas_state": canvas},
+    )
+    assert res.status_code == 200, res.text
+    mermaid = res.json()["mermaid"]
+    assert 'subgraph g0["Camada transacional"]' in mermaid
+    assert 'n0["API<br/>App Server"]' in mermaid
+    assert "style g0 fill:transparent" in mermaid
+
+
 async def test_draft_requires_intake_and_uses_fixture(client):
     no_intake = (await client.post("/api/diagrams", json={"title": "Sem contexto"})).json()
     res = await client.post("/api/exports/draft", json={"diagram_id": no_intake["id"]})

@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 
+import { hasScalingControls, hasSizeControls } from "./capacity";
 import { useCanvas, type ArchNodeData } from "./store";
 
 const healthBorder = {
@@ -12,9 +13,6 @@ const replicaBtn =
   "flex h-4 w-4 items-center justify-center rounded border border-white/15 " +
   "font-mono text-[10px] leading-none text-ink/60 hover:border-primary hover:text-ink";
 
-// clients têm capacidade infinita — o tráfego é controlado pelo simulador,
-// então réplicas não fazem sentido (controles ocultos)
-const NO_REPLICAS = new Set(["client", "mobile"]);
 const sizeCode = { small: "S", medium: "M", large: "L" } as const;
 const statusTone = {
   steady: "text-ink/40",
@@ -31,6 +29,9 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
   const scaling = data.scaling ?? "fixed";
   const size = data.size ?? "medium";
   const maxReplicas = Math.max(replicas, data.maxReplicas ?? 10);
+  const capacityManagedExternally = data.capacityManagedExternally === true;
+  const sizeControls = !capacityManagedExternally && hasSizeControls(data.archetype);
+  const scalingControls = !capacityManagedExternally && hasScalingControls(data.archetype);
   const guardrailStage = data.archetype === "guardrails"
     ? "entrada"
     : data.archetype === "output-guardrail"
@@ -44,10 +45,12 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
     ? "border-dashed border-cyan-400/80"
     : selected
       ? "border-primary"
-      : sim
+      : sim && !capacityManagedExternally
         ? healthBorder[sim.health]
         : "border-white/15";
-  const simulationEffect = sim?.health === "critical"
+  const simulationEffect = capacityManagedExternally
+    ? ""
+    : sim?.health === "critical"
     ? "sim-node-critical"
     : sim
       ? "sim-node-clear"
@@ -78,7 +81,11 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
           e.stopPropagation();
           setEditingNode(id);
         }}
-        title="editar nome, porte e política de escala"
+        title={scalingControls
+          ? "editar nome, porte e política de escala"
+          : sizeControls
+            ? "editar nome, subtítulo e porte"
+            : "editar nome e subtítulo"}
         className="nodrag absolute right-1.5 top-1.5 rounded px-1 font-mono text-[10px]
                    text-ink/35 hover:bg-white/10 hover:text-ink"
       >
@@ -89,6 +96,17 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
       <div className="font-mono text-[10px] uppercase tracking-widest text-ink/40">
         {data.label}
       </div>
+      {capacityManagedExternally && (
+        <div className="mt-1">
+          <span
+            className="rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5
+                       font-mono text-[8px] uppercase tracking-wide text-cyan-200"
+            title="capacidade gerenciada por um provedor ou outra área"
+          >
+            fora da simulação
+          </span>
+        </div>
+      )}
       {guardrailStage && (
         <div className="mt-1 flex flex-wrap gap-1 font-mono text-[8px] uppercase tracking-wide">
           <span className="rounded border border-primary/25 bg-primary/10 px-1 py-0.5 text-primary">
@@ -108,14 +126,16 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
           </span>
         </div>
       )}
-      {!NO_REPLICAS.has(data.archetype) && (
+      {sizeControls && (
         <div className="mt-1 flex gap-1 font-mono text-[9px] uppercase tracking-wide">
           <span className="rounded bg-white/5 px-1.5 py-0.5 text-ink/55" title={`porte ${size}`}>
             {sizeCode[size]}
           </span>
-          <span className="rounded bg-white/5 px-1.5 py-0.5 text-ink/55">
-            {scaling === "elastic" ? "auto" : "fixa"}
-          </span>
+          {scalingControls && (
+            <span className="rounded bg-white/5 px-1.5 py-0.5 text-ink/55">
+              {scaling === "elastic" ? "auto" : "fixa"}
+            </span>
+          )}
           {sim && (
             <span className={`ml-auto rounded bg-white/5 px-1.5 py-0.5 ${statusTone[sim.status]}`}>
               {sim.status === "backlogged"
@@ -130,7 +150,7 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
         </div>
       )}
       <div className="nodrag mt-1.5 flex items-center gap-1.5">
-        {!NO_REPLICAS.has(data.archetype) && (
+        {scalingControls && (
           <>
             <button className={replicaBtn} title="remover réplica" onClick={setReplicas(-1)}>
               −
@@ -147,7 +167,14 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
             </button>
           </>
         )}
-        {sim && (
+        {sim && capacityManagedExternally ? (
+          <span
+            className="font-mono text-[10px] text-cyan-100/60"
+            title="fora da simulação; o fluxo e a latência permanecem"
+          >
+            {Math.round(sim.rps)} rps · {Math.round(sim.latency_ms)} ms
+          </span>
+        ) : sim && (
           <span
             className="ml-auto font-mono text-[10px] text-ink/50"
             title={`${sim.profile} · capacidade efetiva ${sim.capacity_rps == null ? "sem limite" : `${Math.round(sim.capacity_rps)} RPS`} · ${Math.round(sim.work_units)} unidades de trabalho`}
@@ -156,18 +183,18 @@ export function ArchNode({ id, data, selected }: NodeProps<Node<ArchNodeData, "a
           </span>
         )}
       </div>
-      {sim && sim.scaling === "elastic" && (
+      {scalingControls && sim && sim.scaling === "elastic" && (
         <div className="mt-1 font-mono text-[9px] text-cyan-300/80">
           {sim.active_units}/{sim.max_units} unidades ativas
           {sim.scaling_events > 0 ? ` · ${sim.scaling_events} escala` : ""}
         </div>
       )}
-      {sim && sim.backlog_messages > 0 && (
+      {!capacityManagedExternally && sim && sim.backlog_messages > 0 && (
         <div className="mt-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-300">
           backlog {Math.round(sim.backlog_messages).toLocaleString("pt-BR")}
         </div>
       )}
-      {sim && sim.error_rate > 0.0001 && (
+      {!capacityManagedExternally && sim && sim.error_rate > 0.0001 && (
         <div className="mt-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-red-400">
           erro {(sim.error_rate * 100).toFixed(1)}%
         </div>

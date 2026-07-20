@@ -16,7 +16,11 @@ def test_mermaid_escapes_labels_and_ignores_ghosts_and_dangling_edges():
             {
                 "id": "app",
                 "type": "arch",
-                "data": {"name": "App\nServer", "label": "App Server"},
+                "data": {
+                    "name": "App\nServer",
+                    "label": "App Server",
+                    "capacityManagedExternally": True,
+                },
             },
             {
                 "id": "ghost",
@@ -41,7 +45,7 @@ def test_mermaid_escapes_labels_and_ignores_ghosts_and_dangling_edges():
         'n0["Cliente &quot;VIP&quot;<br/>Client &lt;Web&gt;<br/>'
         'entrada &amp; saída"]' in mermaid
     )
-    assert 'n1["App<br/>Server<br/>App Server"]' in mermaid
+    assert 'n1["App<br/>Server<br/>App Server<br/>Fora da simulação"]' in mermaid
     assert 'n0 -->|"request &quot;sync&quot;"| n1' in mermaid
     assert "Sugestão" not in mermaid
     assert "ai_call" not in mermaid

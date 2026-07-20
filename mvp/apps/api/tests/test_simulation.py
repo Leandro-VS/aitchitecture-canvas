@@ -116,6 +116,33 @@ def test_batch_inference_is_offline_work_and_does_not_pollute_online_availabilit
     assert result.availability_pct == 100
 
 
+def test_observability_sink_ignores_legacy_replica_and_scaling_properties():
+    diagram = canvas(
+        [
+            node("client", "client"),
+            node(
+                "observer",
+                "llm-observability",
+                size="large",
+                scaling="elastic",
+                replicas=5,
+                maxReplicas=20,
+            ),
+        ],
+        [edge("client", "observer", "telemetry")],
+    )
+
+    result = simulate(diagram, SimParams(base_rps=100), SPECS)
+
+    observer = result.nodes["observer"]
+    assert observer.profile == "Observabilidade"
+    assert observer.size == "large"
+    assert observer.scaling == "fixed"
+    assert observer.active_units == 1
+    assert observer.max_units == 1
+    assert observer.scaling_events == 0
+
+
 def test_serverless_inference_exposes_cold_start_in_the_first_window():
     diagram = canvas(
         [node("client", "client"), node("endpoint", "model-endpoint-serverless")],
@@ -278,6 +305,48 @@ def test_size_and_capacity_profile_change_effective_capacity():
     assert nominal.nodes["app"].size == "large"
     assert nominal.nodes["app"].capacity_rps > conservative.nodes["app"].capacity_rps
     assert nominal.nodes["app"].cpu < conservative.nodes["app"].cpu
+
+
+def test_external_capacity_is_unbounded_but_keeps_latency_and_flow():
+    managed_dependency = canvas(
+        [
+            node("client", "client"),
+            node(
+                "external",
+                "app-server",
+                capacityManagedExternally=True,
+                size="small",
+                scaling="elastic",
+                replicas=1,
+                maxReplicas=20,
+            ),
+            node("cache", "cache"),
+        ],
+        [edge("client", "external"), edge("external", "cache")],
+    )
+
+    result = simulate(managed_dependency, SimParams(base_rps=5_000), SPECS)
+
+    external = result.nodes["external"]
+    assert external.rps == 5_000
+    assert external.capacity_rps is None
+    assert external.cpu == 0
+    assert external.error_rate == 0
+    assert external.health == "ok"
+    assert external.scaling == "fixed"
+    assert external.active_units == 1
+    assert external.max_units == 1
+    assert external.scaling_events == 0
+    assert external.latency_ms == 25
+    assert external.profile == "Compute · Fora da simulação"
+    assert result.nodes["cache"].rps == 5_000
+    assert result.p99_ms == 27
+    assert result.bottleneck is None
+
+    managed_dependency["nodes"][1]["data"]["capacityManagedExternally"] = False
+    included = simulate(managed_dependency, SimParams(base_rps=5_000), SPECS)
+    assert included.nodes["external"].health == "critical"
+    assert included.bottleneck == "external"
 
 
 def test_elastic_scaling_reacts_after_delay_and_preserves_the_bad_interval():

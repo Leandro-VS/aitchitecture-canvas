@@ -75,7 +75,7 @@ class InvalidDiff(Exception):
 
 
 def _canvas_nodes(canvas: dict) -> list[dict]:
-    return [n for n in canvas.get("nodes", []) if n.get("type") != "annotation"]
+    return [n for n in canvas.get("nodes", []) if n.get("type") == "arch"]
 
 
 def _resolve_one(ref: str, canvas: dict, new_ids: set[str]) -> str | None:

@@ -33,7 +33,8 @@ def test_valid_findings_pass():
 CANVAS = {
     "nodes": [
         {"id": "n1", "type": "arch", "position": {"x": 0, "y": 0},
-         "data": {"archetype": "llm-gateway", "name": "Gateway LLM", "replicas": 2}},
+         "data": {"archetype": "llm-gateway", "name": "Gateway LLM", "replicas": 2,
+                  "capacityManagedExternally": True}},
         {"id": "n2", "type": "arch", "position": {"x": 0, "y": 0},
          "data": {"archetype": "sql-db", "name": "pg-principal", "subtitle": "Write Only"}},
         {"id": "note1", "type": "annotation", "position": {"x": 0, "y": 0},
@@ -56,6 +57,8 @@ def test_serialize_canvas_includes_annotations_and_anchor():
     s = serialize_canvas(CANVAS, INTAKE, None)
     assert [c["name"] for c in s["components"]] == ["Gateway LLM", "pg-principal"]
     assert s["components"][0]["replicas"] == 2
+    assert s["components"][0]["capacity_managed_externally"] is True
+    assert s["components"][1]["capacity_managed_externally"] is False
     assert s["connections"] == [{"from": "Gateway LLM", "intent": "request", "to": "pg-principal"}]
     assert s["annotations"] == [
         {"text": "banco X é mandatório (comitê)", "anchored_to": "pg-principal"}

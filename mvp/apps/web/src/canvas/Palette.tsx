@@ -62,13 +62,14 @@ export function Palette() {
   });
   const addFromPalette = useCanvas((s) => s.addFromPalette);
   const addAnnotation = useCanvas((s) => s.addAnnotation);
+  const addGroup = useCanvas((s) => s.addGroup);
   const { getViewport, screenToFlowPosition } = useReactFlow();
   const [minimized, setMinimized] = useState(false);
   const [search, setSearch] = useState("");
   const [infoOpen, setInfoOpen] = useState(false);
   const cascade = useRef(0);
 
-  const centerPosition = (kind: "arch" | "annotation" = "arch") => {
+  const centerPosition = (kind: "arch" | "annotation" | "group" = "arch") => {
     const canvas = document.querySelector<HTMLElement>(".react-flow.canvas-mat");
     const bounds = canvas?.getBoundingClientRect();
     const offsetPx = (cascade.current++ % 6) * 28;
@@ -81,12 +82,20 @@ export function Palette() {
     }
 
     const viewport = getViewport();
-    const estimatedWidth = kind === "annotation" ? 160 : 144;
-    const estimatedHeight = kind === "annotation" ? 72 : 84;
-    return {
+    const estimatedWidth = kind === "group" ? 480 : kind === "annotation" ? 160 : 144;
+    const estimatedHeight = kind === "group" ? 280 : kind === "annotation" ? 72 : 84;
+    const position = {
       x: (bounds.width / 2 - viewport.x + offsetPx) / viewport.zoom - estimatedWidth / 2,
       y: (bounds.height / 2 - viewport.y + offsetPx) / viewport.zoom - estimatedHeight / 2,
     };
+    if (kind === "group") {
+      const belowToolbar = screenToFlowPosition({
+        x: bounds.left,
+        y: bounds.top + 110,
+      });
+      position.y = Math.max(position.y, belowToolbar.y);
+    }
+    return position;
   };
 
   const groups = useMemo(() => {
@@ -150,7 +159,7 @@ export function Palette() {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         <section className="mb-4">
           <h3 className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-ink/35">
-            Annotations
+            Organização
           </h3>
           <div
             draggable
@@ -167,6 +176,23 @@ export function Palette() {
               className="w-full cursor-pointer px-2.5 py-1.5 text-left"
             >
               + Balão de comentário
+            </button>
+          </div>
+          <div
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(ARCHETYPE_DRAG_TYPE, JSON.stringify({ kind: "group" }));
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            className="mt-1 rounded-md border-2 border-dashed border-primary/35 bg-primary/[0.03]
+                       text-xs text-primary/80 hover:border-primary/70"
+          >
+            <button
+              type="button"
+              onClick={() => addGroup(centerPosition("group"))}
+              className="w-full cursor-pointer px-2.5 py-1.5 text-left"
+            >
+              + Grupo
             </button>
           </div>
         </section>
@@ -275,6 +301,12 @@ export function Palette() {
               a probabilística amplia a cobertura, mas pode produzir falsos positivos e negativos;
               a generativa considera mais nuances, com maior custo e latência. O componente representa
               esse comportamento sem impor uma tecnologia ou infraestrutura específica.
+            </p>
+            <p className="mt-2">
+              Marque <strong className="font-medium text-ink/80">Remover da Simulação</strong> para
+              dependências operadas por um provedor ou outra área. Elas
+              permanecem no fluxo e no p99, mas não saturam nem exigem configuração de porte,
+              unidades ou escala dentro deste diagrama.
             </p>
             <p className="mt-2">
               Interação atual inspeciona apenas o turno em curso. Histórico recente permite detectar

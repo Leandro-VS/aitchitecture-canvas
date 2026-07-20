@@ -506,6 +506,13 @@ export function SimulationBar({ diagramId }: { diagramId: string }) {
               Comentários e sugestões de IA ainda não aplicadas não recebem tráfego.
             </p>
             <p className="mt-2">
+              Nas propriedades de um componente, <strong className="font-medium text-ink/80">Remover
+              da Simulação</strong> representa serviços operados por um provedor ou outra área.
+              O nó continua recebendo e encaminhando tráfego, e sua latência base permanece no p99,
+              mas a capacidade é assumida como ilimitada: ele não satura, não gera erro de capacidade,
+              backlog, gargalo ou evento de escala.
+            </p>
+            <p className="mt-2">
               Uma conexão <strong className="font-medium text-ink/80">validation</strong> do
               orquestrador para um guardrail terminal representa uma chamada síncrona com retorno
               implícito. O guardrail decide bloquear ou liberar, mas não se torna o próximo dono do

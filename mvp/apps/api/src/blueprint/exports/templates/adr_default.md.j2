@@ -36,10 +36,10 @@
 
 ## Componentes
 
-| Componente | Subtítulo | Arquétipo | Réplicas |
+| Componente | Subtítulo | Arquétipo | Capacidade |
 |---|---|---|---|
 {% for c in components -%}
-| {{ c.name }} | {{ c.subtitle or "—" }} | {{ c.archetype }} | ×{{ c.replicas }} |
+| {{ c.name }} | {{ c.subtitle or "—" }} | {{ c.archetype }} | {% if c.capacity_managed_externally %}Fora da simulação{% else %}×{{ c.replicas }}{% endif %} |
 {% endfor %}
 
 {% if connections %}

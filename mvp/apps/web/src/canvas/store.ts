@@ -40,6 +40,8 @@ export interface ArchNodeData extends Record<string, unknown> {
   /** fixa mantém replicas; elástica pode crescer até maxReplicas com atraso */
   scaling?: "fixed" | "elastic";
   maxReplicas?: number;
+  /** capacidade operada por provedor/área externa; mantém fluxo e latência no simulador */
+  capacityManagedExternally?: boolean;
   /** quanto contexto o guardrail analisa */
   guardrailScope?: "current_turn" | "recent_history";
   /** comportamento da estratégia de inspeção */
@@ -53,7 +55,21 @@ export interface AnnotationData extends Record<string, unknown> {
   text: string;
 }
 
-export type CanvasNode = Node<ArchNodeData, "arch"> | Node<AnnotationData, "annotation">;
+export interface GroupData extends Record<string, unknown> {
+  name: string;
+  width: number;
+  height: number;
+}
+
+export type CanvasNode =
+  | Node<ArchNodeData, "arch">
+  | Node<AnnotationData, "annotation">
+  | Node<GroupData, "visualGroup">;
+
+export interface CanvasClipboard {
+  nodes: CanvasNode[];
+  edges: Edge[];
+}
 
 interface PaletteNodeDefaults {
   scaling?: "fixed" | "elastic";
@@ -65,6 +81,9 @@ interface PaletteNodeDefaults {
 
 export const isArchNode = (n: CanvasNode): n is Node<ArchNodeData, "arch"> =>
   n.type === "arch";
+
+export const isGroupNode = (n: CanvasNode): n is Node<GroupData, "visualGroup"> =>
+  n.type === "visualGroup";
 
 interface CanvasStore {
   diagramId: string | null;
@@ -93,6 +112,8 @@ interface CanvasStore {
     defaults?: PaletteNodeDefaults,
   ) => void;
   addAnnotation: (position: XYPosition) => void;
+  addGroup: (position: XYPosition) => void;
+  pasteElements: (clipboard: CanvasClipboard, offset: XYPosition) => void;
   updateNodeData: (id: string, fields: Record<string, unknown>) => void;
   updateEdgeData: (id: string, fields: Record<string, unknown>) => void;
   setSim: (sim: SimResult | null) => void;
@@ -252,6 +273,78 @@ export const useCanvas = create<CanvasStore>()(
           ],
         })),
 
+      addGroup: (position) =>
+        set((s) => ({
+          rev: s.rev + 1,
+          nodes: [
+            ...s.nodes,
+            {
+              id: newId("group"),
+              type: "visualGroup" as const,
+              position,
+              zIndex: -1,
+              data: {
+                name: "Novo grupo",
+                width: 480,
+                height: 280,
+              },
+            },
+          ],
+        })),
+
+      pasteElements: (clipboard, offset) =>
+        set((s) => {
+          if (clipboard.nodes.length === 0) return s;
+
+          const idMap = new Map<string, string>();
+          const nodes = clipboard.nodes.map((node) => {
+            const prefix = node.type === "visualGroup"
+              ? "group"
+              : node.type === "annotation"
+                ? "note"
+                : "n";
+            const id = newId(prefix);
+            idMap.set(node.id, id);
+            return {
+              id,
+              type: node.type,
+              position: {
+                x: node.position.x + offset.x,
+                y: node.position.y + offset.y,
+              },
+              data: structuredClone(node.data),
+              selected: true,
+              zIndex: node.type === "visualGroup" ? -1 : node.zIndex,
+            } as CanvasNode;
+          });
+          const edges = clipboard.edges.flatMap((edge) => {
+            const source = idMap.get(edge.source);
+            const target = idMap.get(edge.target);
+            if (!source || !target) return [];
+            return [{
+              ...edge,
+              id: newId("e"),
+              source,
+              target,
+              data: edge.data ? structuredClone(edge.data) : undefined,
+              selected: false,
+            }];
+          });
+
+          return {
+            rev: s.rev + 1,
+            editingNodeId: null,
+            nodes: [
+              ...s.nodes.map((node) => ({ ...node, selected: false }) as CanvasNode),
+              ...nodes,
+            ],
+            edges: [
+              ...s.edges.map((edge) => ({ ...edge, selected: false })),
+              ...edges,
+            ],
+          };
+        }),
+
       updateNodeData: (id, fields) =>
         set((s) => ({
           rev: s.rev + 1,
@@ -403,7 +496,7 @@ export const serializeCanvas = () => {
   return {
     nodes: nodes
       .filter((n) => !n.data.ghost)
-      .map(({ id, type, position, data }) => ({ id, type, position, data })),
+      .map(({ id, type, position, data, zIndex }) => ({ id, type, position, data, zIndex })),
     edges: edges
       .filter((e) => !(e.data as { ghost?: boolean } | undefined)?.ghost)
       .map(({ id, source, target, sourceHandle, targetHandle, type, data }) => ({

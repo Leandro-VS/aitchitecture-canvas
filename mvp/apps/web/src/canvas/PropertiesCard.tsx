@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api, type Archetype } from "../api/client";
+import { hasScalingControls, hasSizeControls } from "./capacity";
 import { isArchNode, useCanvas, type ArchNodeData } from "./store";
 
 const field =
   "w-full select-text rounded-md border border-white/10 bg-card px-2.5 py-1.5 text-sm " +
   "text-ink placeholder:text-ink/30 focus:border-primary focus:outline-none";
 const label = "mb-1 block font-mono text-[10px] uppercase tracking-widest text-ink/50";
-const NO_CAPACITY = new Set(["client", "mobile"]);
 
 /** Card de propriedades — atualiza o canvas durante a edição e fecha ao salvar
  *  ou ao clicar no pane. Tudo continua opcional. */
@@ -31,6 +31,8 @@ export function PropertiesCard() {
   const archetypeDescription = selectedArchetype?.description;
   const isGuardrail = selectedArchetype?.archetype_class === "input-guardrail"
     || selectedArchetype?.archetype_class === "output-guardrail";
+  const capacityManagedExternally = isArchNode(node)
+    && node.data.capacityManagedExternally === true;
 
   const close = () => setEditingNode(null);
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -45,7 +47,11 @@ export function PropertiesCard() {
     >
       <div className="mb-2 flex items-center justify-between">
         <h2 className="font-mono text-[10px] uppercase tracking-widest text-ink/50">
-          {node.type === "annotation" ? "Comentário" : "Propriedades"}
+          {node.type === "annotation"
+            ? "Comentário"
+            : node.type === "visualGroup"
+              ? "Grupo"
+              : "Propriedades"}
         </h2>
         <button onClick={close} className="text-ink/40 hover:text-ink">✕</button>
       </div>
@@ -75,6 +81,32 @@ export function PropertiesCard() {
                        text-white transition hover:bg-primary/80"
           >
             Salvar comentário
+          </button>
+        </form>
+      ) : node.type === "visualGroup" ? (
+        <form onSubmit={submit} className="space-y-3">
+          <p className="text-[11px] leading-relaxed text-ink/50">
+            Região visual para organizar o diagrama. Ela não participa do fluxo nem da simulação.
+          </p>
+          <div>
+            <label className={label} htmlFor="p-group-name">Nome</label>
+            <input
+              id="p-group-name"
+              autoFocus
+              className={field}
+              value={node.data.name}
+              onChange={(event) => updateNodeData(node.id, { name: event.target.value })}
+            />
+          </div>
+          <p className="text-[10px] leading-relaxed text-ink/40">
+            Arraste pelo título para mover e use as alças da seleção para redimensionar.
+          </p>
+          <button
+            type="submit"
+            className="w-full rounded-md bg-primary px-3 py-1.5 text-xs font-medium
+                       text-white transition hover:bg-primary/80"
+          >
+            Salvar grupo
           </button>
         </form>
       ) : (
@@ -145,9 +177,12 @@ export function PropertiesCard() {
                 </p>
               </div>
             )}
-            {!NO_CAPACITY.has(node.data.archetype) && (
+            {!capacityManagedExternally && hasSizeControls(node.data.archetype) && (
               <div className="space-y-2 rounded-lg border border-white/10 bg-card/50 p-2.5">
-                <div className="grid grid-cols-2 gap-2">
+                <div className={hasScalingControls(node.data.archetype)
+                  ? "grid grid-cols-2 gap-2"
+                  : "grid grid-cols-1 gap-2"}
+                >
                   <div>
                     <label className={label} htmlFor="p-size">Porte</label>
                     <select
@@ -161,65 +196,93 @@ export function PropertiesCard() {
                       <option value="large">Large · 2×</option>
                     </select>
                   </div>
-                  <div>
-                    <label className={label} htmlFor="p-scaling">Escala</label>
-                    <select
-                      id="p-scaling"
-                      className={field}
-                      value={node.data.scaling ?? "fixed"}
-                      onChange={(e) => updateNodeData(node.id, { scaling: e.target.value })}
-                    >
-                      <option value="fixed">Fixa</option>
-                      <option value="elastic">Elástica</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={label} htmlFor="p-min-units">
-                      {(node.data.scaling ?? "fixed") === "elastic" ? "Mín. unidades" : "Unidades"}
-                    </label>
-                    <input
-                      id="p-min-units"
-                      type="number"
-                      min={1}
-                      max={100}
-                      className={field}
-                      value={node.data.replicas ?? 1}
-                      onChange={(e) => {
-                        const replicas = Math.min(100, Math.max(1, Number(e.target.value) || 1));
-                        updateNodeData(node.id, {
-                          replicas,
-                          maxReplicas: Math.max(replicas, node.data.maxReplicas ?? 10),
-                        });
-                      }}
-                    />
-                  </div>
-                  {(node.data.scaling ?? "fixed") === "elastic" && (
+                  {hasScalingControls(node.data.archetype) && (
                     <div>
-                      <label className={label} htmlFor="p-max-units">Máx. unidades</label>
-                      <input
-                        id="p-max-units"
-                        type="number"
-                        min={node.data.replicas ?? 1}
-                        max={100}
+                      <label className={label} htmlFor="p-scaling">Escala</label>
+                      <select
+                        id="p-scaling"
                         className={field}
-                        value={Math.max(node.data.replicas ?? 1, node.data.maxReplicas ?? 10)}
-                        onChange={(e) => updateNodeData(node.id, {
-                          maxReplicas: Math.min(
-                            100,
-                            Math.max(node.data.replicas ?? 1, Number(e.target.value) || 1),
-                          ),
-                        })}
-                      />
+                        value={node.data.scaling ?? "fixed"}
+                        onChange={(e) => updateNodeData(node.id, { scaling: e.target.value })}
+                      >
+                        <option value="fixed">Fixa</option>
+                        <option value="elastic">Elástica</option>
+                      </select>
                     </div>
                   )}
                 </div>
+                {hasScalingControls(node.data.archetype) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={label} htmlFor="p-min-units">
+                        {(node.data.scaling ?? "fixed") === "elastic"
+                          ? "Mín. unidades"
+                          : "Unidades"}
+                      </label>
+                      <input
+                        id="p-min-units"
+                        type="number"
+                        min={1}
+                        max={100}
+                        className={field}
+                        value={node.data.replicas ?? 1}
+                        onChange={(e) => {
+                          const replicas = Math.min(100, Math.max(1, Number(e.target.value) || 1));
+                          updateNodeData(node.id, {
+                            replicas,
+                            maxReplicas: Math.max(replicas, node.data.maxReplicas ?? 10),
+                          });
+                        }}
+                      />
+                    </div>
+                    {(node.data.scaling ?? "fixed") === "elastic" && (
+                      <div>
+                        <label className={label} htmlFor="p-max-units">Máx. unidades</label>
+                        <input
+                          id="p-max-units"
+                          type="number"
+                          min={node.data.replicas ?? 1}
+                          max={100}
+                          className={field}
+                          value={Math.max(node.data.replicas ?? 1, node.data.maxReplicas ?? 10)}
+                          onChange={(e) => updateNodeData(node.id, {
+                            maxReplicas: Math.min(
+                              100,
+                              Math.max(node.data.replicas ?? 1, Number(e.target.value) || 1),
+                            ),
+                          })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <p className="text-[10px] leading-relaxed text-ink/40">
-                  O porte altera a capacidade por unidade. Escala elástica reage com atraso
-                  dentro da janela simulada, até o máximo definido.
+                  {hasScalingControls(node.data.archetype)
+                    ? "O porte altera a capacidade por unidade. Escala elástica reage com atraso dentro da janela simulada, até o máximo definido."
+                    : "O porte altera a capacidade nominal deste coletor de observabilidade."}
                 </p>
               </div>
+            )}
+            {selectedArchetype?.base_rps != null && (
+              <label className="flex cursor-pointer gap-2.5 rounded-lg border border-primary/25
+                                bg-primary/5 px-2.5 py-2.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
+                  checked={capacityManagedExternally}
+                  onChange={(event) => updateNodeData(node.id, {
+                    capacityManagedExternally: event.target.checked,
+                  })}
+                />
+                <span>
+                  <span className="block text-xs font-medium text-ink/80">
+                    Remover da Simulação
+                  </span>
+                  <span className="mt-1 block text-[10px] leading-relaxed text-ink/45">
+                    Mantém o fluxo e a latência, mas deixa o componente fora da simulação.
+                  </span>
+                </span>
+              </label>
             )}
             <button
               type="submit"
