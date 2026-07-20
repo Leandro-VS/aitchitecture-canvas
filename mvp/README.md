@@ -59,18 +59,6 @@ make seed    # migrations (alembic upgrade head) + 21 arquétipos + usuário dev
 open http://localhost:5173
 ```
 
-Para indexar o corpus de guidelines de exemplo (publicado no MinIO pelo próprio
-compose) e habilitar as citações do Juiz:
-
-```bash
-curl -X POST localhost:8000/api/corpus/publish \
-  -H 'Content-Type: application/json' -d '{"version":"2026.07.14"}'
-```
-
-Serviços: web `:5173` · api `:8000` (`/docs` = OpenAPI) · MinIO console `:9001`
-(login `blueprint` / `blueprint123`). Auth é stub por e-mail (`dev@local`,
-admin) — recusada pelo app fora de `ENV=local`.
-
 ### Comandos do dia a dia
 
 ```bash
